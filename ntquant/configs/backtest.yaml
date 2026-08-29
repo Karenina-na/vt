@@ -1,0 +1,42 @@
+# ntquant backtest configuration
+# asset_class 支持：FX / EQUITY / CRYPTOCURRENCY / FUTURE / INDEX / COMMODITY / CFD
+# venue.account_type 支持：MARGIN（保证金）/ CASH（现货现金账户）
+venue:
+  name: SIM
+  oms_type: NETTING
+  account_type: MARGIN
+  base_currency: USD
+  starting_balance: 100000.0
+  default_leverage: 10
+
+instrument:
+  asset_class: FX
+  instrument_id: EUR/USD.SIM
+  raw_symbol: EUR/USD
+  base_currency: USD
+  quote_currency: USD
+  price_precision: 5
+  size_precision: 2
+  price_increment: "0.00001"
+  size_increment: "0.01"
+  min_quantity: "0.01"
+  max_quantity: 10000000
+  lot_size: 1
+
+strategy:
+  name: ema_cross
+  strategy_id: EMA-001
+  trade_size: "10000"
+  fast_period: 10
+  slow_period: 30
+  bar_type: EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL
+
+data:
+  instrument_id: EUR/USD.SIM
+  count: 2000
+  seed: null
+  catalog_path: docs/data
+  bar_type: EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL
+
+output_path: output
+log_level: INFO

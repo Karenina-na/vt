@@ -1,0 +1,19 @@
+# Environment
+.venv/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Generated
+output/
+docs/data/
+
+# OS
+.DS_Store
+*.log

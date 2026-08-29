@@ -1,0 +1,29 @@
+[project]
+name = "ntquant"
+version = "0.1.0"
+description = "Personal quantitative research & backtest scaffold built on NautilusTrader"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "nautilus_trader[visualization]==1.231.0",
+    "PyYAML>=6.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ntquant*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
