@@ -20,7 +20,7 @@
 |---|---|---|
 | `synthetic` | 默认，内存合成 OHLCV（不落库） | 无 |
 | `csv` / `parquet` | 本地 OHLCV 文件 | `source_path` 文件路径 |
-| `binance` | Binance 公开 klines REST（免密钥） | `instrument.raw_symbol` + bar_type |
+| `binance` | Binance 公开 klines REST（免密钥），支持现货与 USDT-M 永续 | `instrument.raw_symbol` + bar_type |
 
 Polygon / Alpha Vantage / Databento 已提供占位类（`PolygonSource` 等），需要 API key 且未接入，
 调用会抛 `NotImplementedError`，留作后续扩展。
@@ -83,6 +83,29 @@ data:
 
 `BinanceKlineSource` 会从 `raw_symbol` 生成 `BTCUSDT`，从 bar_type 的 `1-HOUR` 推断 `1h`。
 默认单次拉 `limit=1000` 根，可在 `ingest --source binance` 外通过配置调整。
+
+**永续合约**：`raw_symbol` 带 `-PERP` 标记（如 `ETHUSDT-PERP`）即自动走 USDT-M 永续端点
+`/fapi/v1/klines`，查询符号会去掉 `-PERP`（→ `ETHUSDT`）。`data` 的 `bar_type`/`instrument_id`
+同样用 `ETHUSDT-PERP.BINANCE`，例如：
+
+```yaml
+instrument:
+  asset_class: CRYPTOCURRENCY
+  instrument_id: ETHUSDT-PERP.BINANCE
+  raw_symbol: ETHUSDT-PERP
+  base_currency: ETH
+  quote_currency: USDT
+  settlement_currency: USDT
+  price_precision: 2
+  size_precision: 3
+  price_increment: "0.01"
+  size_increment: "0.001"
+
+data:
+  source: binance
+  bar_type: ETHUSDT-PERP.BINANCE-15-MINUTE-LAST-EXTERNAL
+  instrument_id: ETHUSDT-PERP.BINANCE
+```
 
 ## 回测使用真实数据
 

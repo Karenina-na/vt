@@ -121,13 +121,52 @@ def test_get_source_resolves_and_validates():
 
 
 def test_binance_interval_and_symbol():
+    from ntquant.backtest.instruments import make_instrument
+    from ntquant.config import load_backtest_config
+
     s = BinanceKlineSource()
     assert s._interval("EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL") == "1m"
     assert s._interval("BTC/USDT.SIM-1-HOUR-LAST-EXTERNAL") == "1h"
+    assert s._interval("ETHUSDT-PERP.BINANCE-15-MINUTE-LAST-EXTERNAL") == "15m"
     assert s._interval("BTC/USDT.SIM-1-DAY-LAST-EXTERNAL") == "1d"
-    assert s._symbol(load_backtest_config().instrument) == "EURUSD"
+    # Perpetual raw symbol from the real config maps to the exchange symbol "ETHUSDT".
+    cfg = load_backtest_config()
+    assert s._symbol(make_instrument(cfg)) == "ETHUSDT"
     with pytest.raises(ValueError, match="Cannot derive"):
         s._interval("EUR/USD.SIM-7-NANOSECOND-LAST-EXTERNAL")
+
+
+def test_binance_perpetual_symbol_strips_perp():
+    # Perpetual raw symbol "ETHUSDT-PERP" must map to the exchange symbol "ETHUSDT".
+    from ntquant.config import load_backtest_config
+    from ntquant.backtest.instruments import make_instrument
+
+    cfg = load_backtest_config()
+    cfg = cfg.__class__(
+        venue=cfg.venue, strategy=cfg.strategy,
+        data=cfg.data.__class__(
+            instrument_id=cfg.data.instrument_id,
+            catalog_path=cfg.data.catalog_path,
+            bar_type=cfg.data.bar_type,
+            source="binance",
+        ),
+        instrument=cfg.instrument.__class__(
+            asset_class="CRYPTOCURRENCY",
+            instrument_id="ETHUSDT-PERP.BINANCE",
+            raw_symbol="ETHUSDT-PERP",
+            base_currency="ETH",
+            quote_currency="USDT",
+            settlement_currency="USDT",
+            price_precision=2,
+            size_precision=3,
+            price_increment="0.01",
+            size_increment="0.001",
+            min_quantity="0.001",
+            start_price=3500.0,
+        ),
+    )
+    inst = make_instrument(cfg)
+    assert BinanceKlineSource()._symbol(inst) == "ETHUSDT"
 
 
 def test_keyed_providers_raise_without_key():

@@ -61,12 +61,15 @@ class CsvSource:
 class BinanceKlineSource:
     """Load historical klines from Binance's public REST API (no auth).
 
-    Uses ``/api/v3/klines`` for the spot market. The symbol is derived from
-    ``instrument.raw_symbol`` (e.g. ``"BTC/USDT"`` -> ``"BTCUSDT"``) and the
-    interval from the bar type aggregation (e.g. ``1-MINUTE`` -> ``"1m"``).
+    Supports the spot market (``/api/v3/klines``) and the USDT-M futures/perpetual
+    market (``/fapi/v1/klines``). ``market`` selects the endpoint and builds the
+    Nautilus symbol accordingly: spot ``"BTC/USDT"`` -> ``BTCUSDT`` / perpetual
+    ``"BTCUSDT"`` -> ``BTCUSDT`` (no ``-PERP`` suffix in the queried symbol). The
+    interval is derived from the bar type aggregation (e.g. ``15-MINUTE`` -> ``"15m"``).
     """
 
     BASE_URL = "https://api.binance.com/api/v3/klines"
+    BASE_URL_FUTURES = "https://fapi.binance.com/fapi/v1/klines"
 
     # Nautilus aggregation name -> Binance interval string.
     _INTERVAL_MAP = {
@@ -80,9 +83,14 @@ class BinanceKlineSource:
         "1-WEEK": "1w",
     }
 
-    def __init__(self, timeout: float = 30.0, limit: int = 1000) -> None:
+    def __init__(self, timeout: float = 30.0, limit: int = 1000, market: str = "spot") -> None:
         self.timeout = timeout
         self.limit = limit
+        self.market = market.lower()
+
+    @property
+    def _base_url(self) -> str:
+        return self.BASE_URL_FUTURES if self.market == "perpetual" else self.BASE_URL
 
     def _interval(self, bar_type) -> str:
         # BarType string form: ``{instrument_id}-{step}-{unit}-{price_type}-EXTERNAL``,
@@ -107,11 +115,15 @@ class BinanceKlineSource:
         return self._INTERVAL_MAP[agg]
 
     def _symbol(self, instrument) -> str:
-        raw = getattr(instrument, "raw_symbol", None)
+        raw = str(getattr(instrument, "raw_symbol", "") or "")
         if not raw:
             raise ValueError(
                 "BinanceKlineSource needs instrument.raw_symbol (e.g. 'BTC/USDT')"
             )
+        # Strip the Nautilus perpetual marker so the queried symbol is the exchange
+        # one (e.g. "ETHUSDT-PERP" -> "ETHUSDT" for /fapi/v1/klines).
+        if "PERP" in raw.upper():
+            raw = raw.split("-")[0]
         return "".join(ch for ch in raw if ch.isalnum()).upper()
 
     def _fetch(self, url: str) -> list:
@@ -129,8 +141,12 @@ class BinanceKlineSource:
         limit = int(kwargs.get("limit", self.limit))
         symbol = self._symbol(config.instrument)
         interval = self._interval(bar_type_str)
-
-        url = f"{self.BASE_URL}?symbol={symbol}&interval={interval}&limit={limit}"
+        # Perpetual futures if the raw symbol carries a "-PERP" marker (e.g. "ETHUSDT-PERP").
+        market = kwargs.get("market") or self.market
+        raw = str(getattr(config.instrument, "raw_symbol", "") or "")
+        if "PERP" in raw.upper():
+            market = "perpetual"
+        url = f"{self._base_url if market == 'perpetual' else self.BASE_URL}?symbol={symbol}&interval={interval}&limit={limit}"
         rows = self._fetch(url)
 
         # Binance kline:
