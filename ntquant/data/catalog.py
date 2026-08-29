@@ -46,12 +46,16 @@ class DataCatalog:
             self.catalog.write_data(list(instruments))
 
     def load_bars(self, instrument_id, bar_type, start=None, end=None) -> list:
-        """Load bars from the catalog, optionally bounded by datetime bounds."""
+        """Load bars from the catalog, optionally bounded by datetime bounds.
+
+        In 1.231.0 ``ParquetDataCatalog.bars`` expects ``bar_types``/``instrument_ids``
+        as *lists*; passing single-object kwargs silently reads every bar type.
+        """
         start_ns = start.value if hasattr(start, "value") else start
         end_ns = end.value if hasattr(end, "value") else end
         return self.catalog.bars(
-            instrument_id=instrument_id,
-            bar_type=bar_type,
+            bar_types=[str(bar_type)],
+            instrument_ids=[str(instrument_id)],
             start=start_ns,
             end=end_ns,
         )
