@@ -1,8 +1,14 @@
-"""Tests for data generation and catalog persistence."""
+"""Tests for data generation, catalog persistence, schema and sources."""
+import tempfile
+
+import pandas as pd
 import pytest
 
-from ntquant.backtest.instruments import make_bar_type
+from ntquant.backtest.instruments import make_bar_type, make_instrument
+from ntquant.config import load_backtest_config
 from ntquant.data.catalog import DataCatalog
+from ntquant.data.loaders import BinanceKlineSource, CsvSource, get_source
+from ntquant.data.schema import normalize_ohlcv_frame
 from ntquant.data.synthetic import generate_synthetic_bars
 
 
@@ -29,3 +35,102 @@ def test_catalog_roundtrip(tmp_path):
     cat.write_bars(bars)
     loaded = cat.load_bars(bt.instrument_id, bt)
     assert len(loaded) == 100
+
+
+def test_catalog_instruments_roundtrip(tmp_path):
+    # 1.231.0 has no ParquetDataCatalog.write_instruments; instruments persist
+    # via write_data. Verify the wrapper's write_instruments path and read-back.
+    cat = DataCatalog(tmp_path)
+    cfg = load_backtest_config()
+    cat.write_instruments([make_instrument(cfg)])
+    found = cat.list_instruments()
+    assert len(found) == 1
+    assert str(found[0].id) == cfg.instrument.instrument_id
+
+
+def test_catalog_has_and_merge(tmp_path):
+    bt = make_bar_type("EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL")
+    bars = generate_synthetic_bars(bt, count=50, seed=7)
+    cat = DataCatalog(tmp_path)
+    assert cat.has_bars(bt.instrument_id, bt) is False
+    cat.write_bars(bars)
+    assert cat.has_bars(bt.instrument_id, bt) is True
+
+
+def test_normalize_ohlcv_frame_alias_mapping():
+    df = pd.DataFrame({
+        "Date": ["2026-01-01", "2026-01-01"],
+        "Open": [1.0, 1.1],
+        "High": [1.2, 1.3],
+        "Low": [0.9, 1.0],
+        "Close": [1.1, 1.2],
+        "Volume": [1000, 1100],
+    })
+    out = normalize_ohlcv_frame(
+        df,
+        columns={"Date": "timestamp", "Open": "open", "High": "high",
+                 "Low": "low", "Close": "close", "Volume": "volume"},
+    )
+    assert list(out.columns) == ["open", "high", "low", "close", "volume"]
+    assert out.index.tz is not None
+    # duplicates removed and sorted ascending
+    assert len(out) == 1
+
+
+def test_normalize_ohlcv_frame_missing_columns():
+    df = pd.DataFrame({"open": [1.0], "high": [1.2], "low": [0.9], "close": [1.1]})
+    with pytest.raises(ValueError, match="Missing OHLCV"):
+        normalize_ohlcv_frame(df)
+
+
+def test_csv_source_load(tmp_path):
+    csv = tmp_path / "bars.csv"
+    csv.write_text(
+        "time,open,high,low,close,volume\n"
+        "2026-01-01T00:00:00Z,1.0,1.2,0.9,1.1,1000\n"
+        "2026-01-01T00:01:00Z,1.1,1.3,1.0,1.2,1200\n"
+    )
+    cfg = load_backtest_config()
+    # point source_path at the temp file and give it an explicit timestamp col
+    cfg = cfg.__class__(
+        venue=cfg.venue, instrument=cfg.instrument, strategy=cfg.strategy,
+        data=cfg.data.__class__(
+            instrument_id=cfg.data.instrument_id,
+            catalog_path=cfg.data.catalog_path,
+            bar_type=cfg.data.bar_type,
+            source="csv",
+            source_path=str(csv),
+            tz="UTC",
+            timestamp_col="time",
+        ),
+        output_path=cfg.output_path,
+        log_level=cfg.log_level,
+    )
+    frame = CsvSource().load(cfg)
+    assert list(frame.columns) == ["open", "high", "low", "close", "volume"]
+    assert len(frame) == 2
+    assert frame.index.tz is not None
+
+
+def test_get_source_resolves_and_validates():
+    assert get_source("csv") is not None
+    assert get_source("parquet") is not None
+    assert get_source("binance") is not None
+    with pytest.raises(ValueError, match="Unknown data source"):
+        get_source("nope")
+
+
+def test_binance_interval_and_symbol():
+    s = BinanceKlineSource()
+    assert s._interval("EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL") == "1m"
+    assert s._interval("BTC/USDT.SIM-1-HOUR-LAST-EXTERNAL") == "1h"
+    assert s._interval("BTC/USDT.SIM-1-DAY-LAST-EXTERNAL") == "1d"
+    assert s._symbol(load_backtest_config().instrument) == "EURUSD"
+    with pytest.raises(ValueError, match="Cannot derive"):
+        s._interval("EUR/USD.SIM-7-NANOSECOND-LAST-EXTERNAL")
+
+
+def test_keyed_providers_raise_without_key():
+    from ntquant.data.loaders import PolygonSource
+    with pytest.raises(NotImplementedError, match="no provider is wired"):
+        PolygonSource().load(load_backtest_config())

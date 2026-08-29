@@ -72,13 +72,25 @@ class StrategyConfig:
 
 @dataclass(frozen=True)
 class DataConfig:
-    """Data loading settings."""
+    """Data loading settings.
+
+    ``source`` selects the ingestion source: ``"synthetic"`` (default, generate in
+    memory), ``"csv"``/``"parquet"`` (local file via ``source_path``), ``"binance"``
+    (public REST), or a keyed provider (Polygon/Tiingo/Databento, placeholders).
+    ``columns`` maps arbitrary source column names to the canonical OHLCV ones, and
+    ``timestamp_col`` names the source timestamp column when it is not the index.
+    """
 
     instrument_id: str = "EUR/USD.SIM"
     count: int = 2000
     seed: int | None = None
     catalog_path: str = "docs/data"
     bar_type: str = "EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL"
+    source: str = "synthetic"
+    source_path: str | None = None
+    tz: str = "UTC"
+    columns: dict[str, str] | None = None
+    timestamp_col: str | None = None
 
 
 @dataclass(frozen=True)
@@ -180,7 +192,9 @@ def _defaults_yaml() -> dict[str, Any]:
                      "fast_period": 10, "slow_period": 30,
                      "bar_type": "EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL"},
         "data": {"instrument_id": "EUR/USD.SIM", "count": 2000, "seed": None,
-                 "catalog_path": "docs/data", "bar_type": "EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL"},
+                 "catalog_path": "docs/data", "bar_type": "EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL",
+                 "source": "synthetic", "source_path": None, "tz": "UTC",
+                 "columns": None, "timestamp_col": None},
         "output_path": "output",
         "log_level": "INFO",
     }

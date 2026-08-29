@@ -23,6 +23,20 @@
 | 数据 wrangler | `from nautilus_trader.persistence.wranglers import BarDataWrangler` | 文档可能写 `nautilus_trader.data.wranglers` ❌ |
 | 分析/tearsheet | `from nautilus_trader.analysis import create_tearsheet, ReportProvider` | ✅ 相同 |
 
+### 数据接入（catalog / wrangler）实测
+
+- `BarDataWrangler(bar_type, instrument).process(df)`：期望 `DatetimeIndex`（UTC）+ 列
+  `open/high/low/close/volume`（`volume` 可省，用默认值）。返回 `list[Bar]`。
+- `ParquetDataCatalog` **没有** `write_instruments` 方法（文档写法会 `AttributeError`）。
+  instrument 必须**随数据一起**用 `write_data([instrument] + bars)` 写入；读取用 `catalog.instruments()`。
+- `consolidate_data`（增量合并/去重）需要传 `data_cls`（如 `Bar`）与 `identifier`(bar_type 字符串)，
+  否则 `class_to_filename(None)` 抛 `AttributeError`。
+- 查询时间边界：`catalog.bars(instrument_id, bar_type, start, end)` 的 start/end 需传**纳秒**，
+  可用 `dt.value`/`int(ts.value)`。
+- `BinanceKlineSource` 从 bar_type 推断 interval：bar_type 形如
+  `BTCUSDT.BINANCE-1-HOUR-LAST-EXTERNAL`，`step` 与 `unit` 是**两个 `-` 分隔的 token**，
+  需用正则 `r"(\d+)-(SECOND|MINUTE|HOUR|DAY|WEEK|MONTH)"` 匹配，不能 `split("-")[1]`。
+
 ## 已安装 extras
 
 - `nautilus_trader[visualization]` → plotly, kaleido

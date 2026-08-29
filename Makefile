@@ -1,6 +1,6 @@
 PY ?= .venv/bin/python
 
-.PHONY: install backtest param report test clean init data
+.PHONY: install backtest param report test clean init data ingest
 
 install:
 	uv pip install --python .venv/bin/python -e ".[dev]"
@@ -22,6 +22,9 @@ init:
 
 data:
 	$(PY) -m ntquant.cli backtest --catalog
+
+ingest:
+	$(PY) -m ntquant.cli ingest --source "$(source)" --config "$(config)"
 
 clean:
 	rm -rf output/* docs/data/*

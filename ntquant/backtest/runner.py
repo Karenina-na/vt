@@ -187,8 +187,16 @@ def _currency(code: str):
 
 
 def _load_bars(config: BacktestConfig, bar_type, use_catalog: bool) -> list:
-    """Load bars either from the catalog or from synthetic generation."""
-    if use_catalog:
+    """Load bars either from the catalog or from synthetic generation.
+
+    When ``config.data.source`` is set to a real source (anything other than
+    ``"synthetic"``), we assume the data has already been ingested into the
+    catalog and read it from there regardless of ``use_catalog``.
+    """
+    source = config.data.source or "synthetic"
+    real_source = source.lower() != "synthetic"
+
+    if use_catalog or real_source:
         from ntquant.data.catalog import DataCatalog
 
         catalog = DataCatalog(config.data.catalog_path)
@@ -196,6 +204,11 @@ def _load_bars(config: BacktestConfig, bar_type, use_catalog: bool) -> list:
         bars = catalog.load_bars(instrument_id, bar_type)
         if bars:
             return bars
+        if real_source:
+            raise ValueError(
+                f"Catalog has no bars for {instrument_id} / {bar_type}. "
+                f"Run `ntquant ingest --source {source}` (or `make ingest`) first."
+            )
     from ntquant.data.synthetic import generate_synthetic_bars
 
     inst = config.instrument

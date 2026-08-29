@@ -30,18 +30,21 @@ vt/
 ├── docs/
 │   ├── version-notes.md     # Nautilus 1.231.0 实测路径映射与已知坑
 │   ├── extending-new-strategy.md  # 如何新增一个策略
-│   └── supported-instruments.md   # 支持的金融产品与配置
+│   ├── supported-instruments.md   # 支持的金融产品与配置
+│   └── data-ingestion.md   # 如何接入真实数据（CSV/Parquet/Binance）到 catalog
 ├── ntquant/
 │   ├── config.py            # 类型化配置加载（YAML + NTA_* 环境变量覆盖）
-│   ├── cli.py               # CLI: backtest / param / report
+│   ├── cli.py               # CLI: backtest / param / report / ingest
 │   ├── logging.py           # 统一日志（Python + LoggingConfig）
 │   ├── configs/
 │   │   ├── backtest.yaml    # 单次回测默认参数
 │   │   └── param.yaml       # 参数扫描网格
 │   ├── data/
 │   │   ├── synthetic.py     # 合成 OHLCV 生成
-│   │   ├── catalog.py       # ParquetDataCatalog 封装（写入/读取）
-│   │   └── loaders.py       # 外部数据下载接口（占位）
+│   │   ├── catalog.py       # ParquetDataCatalog 封装（写入/读取/合并）
+│   │   ├── schema.py        # 统一 OHLCV DataFrame 规范化/列映射
+│   │   ├── loaders.py       # 外部数据源注册表（Csv/Binance/占位 providers）
+│   │   └── ingest.py        # 取数→规范→wrangler→落库 编排
 │   ├── strategies/
 │   │   ├── base.py          # BaseStrategyConfig/BaseStrategy 多策略底座
 │   │   └── ema_cross.py     # EMA 交叉示例策略
@@ -57,7 +60,7 @@ vt/
 │   │   └── __init__.py      # 仓位计算 + RiskEngineConfig 工厂（含 bug 规避）
 │   └── live/
 │       └── __init__.py      # 实盘占位（phase 2 接入 LiveNode + adapter）
-└── tests/                   # pytest 单测（数据/配置/策略/回测端到端）
+└── tests/                   # pytest 单测（数据/配置/策略/回测/ingest 端到端）
 ```
 
 ## 常用命令
@@ -68,6 +71,7 @@ vt/
 | `make backtest` | 运行 EMA 交叉回测 + CSV 报表 → `output/` |
 | `make param` | 网格参数扫描 → `output/param_results.csv` |
 | `make report` | 生成 CSV 报表 + HTML tearsheet `output/tearsheet.html` |
+| `make ingest source=csv` | 从外部来源（csv/parquet/binance）拉真实数据落库到 catalog |
 | `make test` | `pytest tests/` |
 | `make clean` | 清空 `output/`、`docs/data/` |
 | `make init` | 从 `.env.example` 复制 `.env` |
@@ -102,6 +106,14 @@ vt/
 - **RiskEngine**：`RiskEngineConfig` 接入引擎时 `bypass=False` 会触发
   `AttributeError: 'int' object has no attribute 'split'`。默认 `bypass=True` 规避
   （`ntquant/risk/__init__.py`）。
+- **数据落库**：`ParquetDataCatalog` **没有** `write_instruments`（文档写法会
+  `AttributeError`）；instrument 须随数据用 `write_data([instrument]+bars)` 一起写入。
+- **增量合并**：`consolidate_data` 需传 `data_cls`(如 `Bar`) 与 `identifier`(bar_type 字符串)，
+  否则 `class_to_filename(None)` 抛 `AttributeError`。
+- **Binance interval 推断**：bar_type 形如 `BTCUSDT.BINANCE-1-HOUR-LAST-EXTERNAL`，
+  step 与 unit 是两个 `-` 分隔 token，需正则匹配，不能 `split("-")`。
+- **真实数据回测**：`data.source != synthetic` 时 `runner` 自动从 catalog 读，需先用
+  `make ingest source=<...>` 落库，否则报错。
 
 ## 代码风格
 

@@ -4,6 +4,7 @@ Subcommands:
 - backtest: run a single EMA cross backtest + reports.
 - param:    grid-search strategy parameters, print/save results.
 - report:   generate CSV reports + HTML tearsheet from a backtest.
+- ingest:   fetch external OHLCV data into the catalog.
 """
 from __future__ import annotations
 
@@ -68,6 +69,16 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    from ntquant.config import load_backtest_config
+    from ntquant.data.ingest import ingest
+
+    cfg = load_backtest_config(args.config)
+    outcome = ingest(cfg, source_name=args.source)
+    print(outcome.summary())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ntquant", description="NautilusTrader quant scaffold")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -85,6 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
     rp = sub.add_parser("report", help="generate CSV reports + tearsheet")
     rp.add_argument("--config", default=None, help="path to backtest YAML")
     rp.set_defaults(func=_cmd_report)
+
+    ing = sub.add_parser("ingest", help="fetch external OHLCV data into the catalog")
+    ing.add_argument("--config", default=None, help="path to backtest YAML")
+    ing.add_argument("--source", default=None,
+                     help="override data.source (csv/parquet/binance/polygon/... )")
+    ing.set_defaults(func=_cmd_ingest)
 
     return parser
 

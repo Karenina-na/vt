@@ -37,6 +37,14 @@ data:
   seed: null
   catalog_path: docs/data
   bar_type: EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL
+  # source: synthetic | csv | parquet | binance | polygon | alphavantage | databento
+  # 非 synthetic 时需先 `make ingest` 落库，回测自动从 catalog 读取。
+  source: synthetic
+  source_path: null
+  tz: UTC
+  # CSV 列名映射（可选）：{原始列名: 规范列名}，timestamp_col 指定时间列
+  columns: null
+  timestamp_col: null
 
 output_path: output
 log_level: INFO
