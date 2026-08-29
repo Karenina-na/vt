@@ -48,6 +48,8 @@ data:
   # CSV 列名映射（可选）：{原始列名: 规范列名}，timestamp_col 指定时间列
   columns: null
   timestamp_col: null
+  # HTTP/HTTPS 代理（可选）：避免 Binance 等网络源被地域封禁，如 http://127.0.0.1:7890
+  proxy: null
 
 output_path: output
 log_level: INFO

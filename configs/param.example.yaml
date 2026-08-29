@@ -14,6 +14,7 @@ data:
   catalog_path: docs/data
   bar_type: EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL
   source: synthetic
+  proxy: null
 
 output_path: output
 log_level: WARNING

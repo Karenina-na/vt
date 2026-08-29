@@ -107,6 +107,19 @@ data:
   instrument_id: ETHUSDT-PERP.BINANCE
 ```
 
+### 3. 使用代理（跨越地域封禁）
+
+某些网络环境下 Binance 返回 `HTTP 451`（区域限制）。可在 `data.proxy` 配置 HTTP/HTTPS 代理：
+
+```yaml
+data:
+  source: binance
+  proxy: http://127.0.0.1:7890
+```
+
+也支持环境变量 `NTA_DATA__PROXY=http://127.0.0.1:7890` 覆盖。代理仅影响网络型数据源
+（当前为 `BinanceKlineSource`），本地 `csv`/`parquet` 不受影响。
+
 ## 回测使用真实数据
 
 回测只关心 `data.source`：非 `synthetic` 一律从 catalog 读取，**无需** `--catalog` 标志。
@@ -136,6 +149,7 @@ cat.merge_bars(data_cls=Bar, deduplicate=True)
 NTA_DATA__SOURCE=binance
 NTA_DATA__SOURCE_PATH=/path/bars.csv
 NTA_DATA__CATALOG_PATH=docs/data
+NTA_DATA__PROXY=http://127.0.0.1:7890
 ```
 
 真实的 API key 请放 `.env`（参考 `.env.example`），仓库不入库。

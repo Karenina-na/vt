@@ -37,6 +37,7 @@ def _build_config(base: BacktestConfig, params: dict[str, Any]) -> BacktestConfi
         tz=d.tz,
         columns=d.columns,
         timestamp_col=d.timestamp_col,
+        proxy=d.proxy,
     )
     return BacktestConfig(
         venue=base.venue,

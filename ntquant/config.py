@@ -99,6 +99,8 @@ class DataConfig:
     (public REST), or a keyed provider (Polygon/Tiingo/Databento, placeholders).
     ``columns`` maps arbitrary source column names to the canonical OHLCV ones, and
     ``timestamp_col`` names the source timestamp column when it is not the index.
+    ``proxy`` is an HTTP/HTTPS proxy URL (e.g. ``http://127.0.0.1:7890``) used by
+    network-based sources (Binance) to reach geoblocked endpoints.
     """
 
     instrument_id: str = "EUR/USD.SIM"
@@ -111,6 +113,7 @@ class DataConfig:
     tz: str = "UTC"
     columns: dict[str, str] | None = None
     timestamp_col: str | None = None
+    proxy: str | None = None
 
 
 @dataclass(frozen=True)

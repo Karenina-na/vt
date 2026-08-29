@@ -66,6 +66,7 @@ class BinanceKlineSource:
     Nautilus symbol accordingly: spot ``"BTC/USDT"`` -> ``BTCUSDT`` / perpetual
     ``"BTCUSDT"`` -> ``BTCUSDT`` (no ``-PERP`` suffix in the queried symbol). The
     interval is derived from the bar type aggregation (e.g. ``15-MINUTE`` -> ``"15m"``).
+    ``proxy`` is an optional HTTP/HTTPS proxy URL (e.g. ``http://127.0.0.1:7890``).
     """
 
     BASE_URL = "https://api.binance.com/api/v3/klines"
@@ -83,10 +84,12 @@ class BinanceKlineSource:
         "1-WEEK": "1w",
     }
 
-    def __init__(self, timeout: float = 30.0, limit: int = 1000, market: str = "spot") -> None:
+    def __init__(self, timeout: float = 30.0, limit: int = 1000, market: str = "spot",
+                 proxy: str | None = None) -> None:
         self.timeout = timeout
         self.limit = limit
         self.market = market.lower()
+        self.proxy = proxy
 
     @property
     def _base_url(self) -> str:
@@ -126,11 +129,17 @@ class BinanceKlineSource:
             raw = raw.split("-")[0]
         return "".join(ch for ch in raw if ch.isalnum()).upper()
 
-    def _fetch(self, url: str) -> list:
+    def _fetch(self, url: str, proxy: str | None = None) -> list:
         import json
         import urllib.request
 
         req = urllib.request.Request(url, headers={"User-Agent": "ntquant/0.1"})
+        proxy = proxy or self.proxy
+        if proxy:
+            handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy})
+            opener = urllib.request.build_opener(handler)
+            with opener.open(req, timeout=self.timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
@@ -147,7 +156,7 @@ class BinanceKlineSource:
         if "PERP" in raw.upper():
             market = "perpetual"
         url = f"{self._base_url if market == 'perpetual' else self.BASE_URL}?symbol={symbol}&interval={interval}&limit={limit}"
-        rows = self._fetch(url)
+        rows = self._fetch(url, proxy=config.data.proxy)
 
         # Binance kline:
         # [open_time(ms), open, high, low, close, volume, close_time, quote_volume,
