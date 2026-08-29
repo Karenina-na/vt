@@ -15,18 +15,22 @@
 - 安装依赖：`uv pip install --python .venv/bin/python -e ".[dev]"`。
 - 关键依赖：`nautilus_trader==1.231.0`（含 `[visualization]` → plotly/kaleido）、
   PyYAML、python-dotenv、pytest。
-- 运行入口：`.venv/bin/python -m ntquant.cli <cmd>` 或 `make <cmd>`。
+- 运行入口：`.venv/bin/python run.py <cmd>` 或 `make <cmd>`。
 
 ## 目录结构
 
 ```
 vt/
 ├── pyproject.toml           # 依赖与包元数据（锁定 1.231.0）
+├── run.py                   # 最外层启动脚本（python run.py backtest / param / ...）
 ├── Makefile                 # 常用任务入口
 ├── AGENTS.md                # 本文档
 ├── README.md                # 项目简介
+├── configs/                 # 外置配置（用户可改，副本被 gitignore）
+│   ├── backtest.example.yaml# 模板：拷贝为 backtest.yaml 使用
+│   └── param.example.yaml   # 模板：拷贝为 param.yaml 使用
 ├── .env.example             # 密钥/覆盖模板（复制为 .env）
-├── .gitignore               # 忽略 .venv、output/、docs/data/、.env
+├── .gitignore               # 忽略 .venv、output/、docs/data/、.env、configs/*.yaml
 ├── docs/
 │   ├── version-notes.md     # Nautilus 1.231.0 实测路径映射与已知坑
 │   ├── extending-new-strategy.md  # 如何新增一个策略
@@ -36,9 +40,6 @@ vt/
 │   ├── config.py            # 类型化配置加载（YAML + NTA_* 环境变量覆盖）
 │   ├── cli.py               # CLI: backtest / param / report / ingest
 │   ├── logging.py           # 统一日志（Python + LoggingConfig）
-│   ├── configs/
-│   │   ├── backtest.yaml    # 单次回测默认参数
-│   │   └── param.yaml       # 参数扫描网格
 │   ├── data/
 │   │   ├── synthetic.py     # 合成 OHLCV 生成
 │   │   ├── catalog.py       # ParquetDataCatalog 封装（写入/读取/合并）
@@ -75,6 +76,15 @@ vt/
 | `make test` | `pytest tests/` |
 | `make clean` | 清空 `output/`、`docs/data/` |
 | `make init` | 从 `.env.example` 复制 `.env` |
+| `make init-config` | 从 `configs/*.example.yaml` 复制用户配置到 `configs/*.yaml` |
+
+## 配置约定
+
+- 配置优先级（高→低）：**环境变量 `NTA_*` > 用户 YAML（`configs/<name>.yaml`）>
+  `.example` 模板 > dataclass 字段默认值**。
+- 仓库只入库 `configs/*.example.yaml` 模板；用户的 `configs/backtest.yaml`、`configs/param.yaml`
+  与 `.env` 均被 `.gitignore` 忽略（勿提交个人参数/密钥）。
+- 未拷贝用户配置也能运行（自动回落 `.example` 与代码默认值）。
 
 模块内运行示例（在项目根）：
 

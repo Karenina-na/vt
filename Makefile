@@ -1,18 +1,18 @@
 PY ?= .venv/bin/python
 
-.PHONY: install backtest param report test clean init data ingest
+.PHONY: install backtest param report test clean init data ingest init-config
 
 install:
 	uv pip install --python .venv/bin/python -e ".[dev]"
 
 backtest:
-	$(PY) -m ntquant.cli backtest
+	$(PY) run.py backtest
 
 param:
-	$(PY) -m ntquant.cli param
+	$(PY) run.py param
 
 report:
-	$(PY) -m ntquant.cli report
+	$(PY) run.py report
 
 test:
 	$(PY) -m pytest tests/
@@ -20,11 +20,15 @@ test:
 init:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env from .env.example"; fi
 
+init-config:
+	@if [ ! -f configs/backtest.yaml ]; then cp configs/backtest.example.yaml configs/backtest.yaml; echo "Created configs/backtest.yaml"; fi
+	@if [ ! -f configs/param.yaml ]; then cp configs/param.example.yaml configs/param.yaml; echo "Created configs/param.yaml"; fi
+
 data:
-	$(PY) -m ntquant.cli backtest --catalog
+	$(PY) run.py backtest --catalog
 
 ingest:
-	$(PY) -m ntquant.cli ingest --source "$(source)" --config "$(config)"
+	$(PY) run.py ingest --source "$(source)" --config "$(config)"
 
 clean:
 	rm -rf output/* docs/data/*

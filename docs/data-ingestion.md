@@ -49,7 +49,7 @@ data:
 
 ```bash
 make ingest source=csv
-# 或直接：.venv/bin/python -m ntquant.cli ingest --source csv
+# 或直接：.venv/bin/python run.py ingest --source csv
 ```
 
 ### 2. Binance K 线（免密钥）
@@ -78,7 +78,7 @@ data:
 拉取并落库：
 
 ```bash
-.venv/bin/python -m ntquant.cli ingest --source binance
+.venv/bin/python run.py ingest --source binance
 ```
 
 `BinanceKlineSource` 会从 `raw_symbol` 生成 `BTCUSDT`，从 bar_type 的 `1-HOUR` 推断 `1h`。

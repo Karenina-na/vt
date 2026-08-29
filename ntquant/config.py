@@ -1,4 +1,10 @@
-"""Typed configuration loading (YAML + .env)."""
+"""Typed configuration loading (YAML + .env).
+
+Precedence (highest first):
+1. Environment variables (``NTA_<SECTION>__<KEY>``, loaded from .env).
+2. YAML file (user's ``configs/<name>.yaml`` copy or the ``.example`` template).
+3. Dataclass field defaults (the single source of config defaults).
+"""
 from __future__ import annotations
 
 import os
@@ -8,7 +14,21 @@ from typing import Any
 
 import yaml
 
-_DEFAULT_CONFIG_PATH = Path(__file__).parent / "configs" / "backtest.yaml"
+# Project root = directory containing ``run.py`` / ``pyproject.toml``.
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_DEFAULT_CONFIG_DIR = _PROJECT_ROOT / "configs"
+
+
+def _default_config_path(name: str) -> Path:
+    """Return the user's config path, falling back to the ``.example`` template.
+
+    A user copy ``configs/<name>.yaml`` takes precedence; if absent the shipped
+    ``configs/<name>.example.yaml`` template is used.
+    """
+    user = _DEFAULT_CONFIG_DIR / f"{name}.yaml"
+    if user.exists():
+        return user
+    return _DEFAULT_CONFIG_DIR / f"{name}.example.yaml"
 
 
 @dataclass(frozen=True)
@@ -105,19 +125,12 @@ class BacktestConfig:
     log_level: str = "INFO"
 
 
-def _merge(defaults: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
-    """Recursively merge override dict into defaults dict."""
-    out = dict(defaults)
-    for key, value in overrides.items():
-        if isinstance(value, dict) and isinstance(out.get(key), dict):
-            out[key] = _merge(out[key], value)
-        else:
-            out[key] = value
-    return out
-
-
 def _build(dc_type: type, data: dict[str, Any]) -> Any:
-    """Build a frozen dataclass from a dict, ignoring unknown keys."""
+    """Build a frozen dataclass from a dict, ignoring unknown keys.
+
+    Missing keys fall through to the dataclass field defaults, so the dataclasses
+    are the single source of configuration defaults (no separate defaults dict).
+    """
     known = {f for f in dc_type.__dataclass_fields__}
     return dc_type(**{k: v for k, v in data.items() if k in known})
 
@@ -128,14 +141,15 @@ def load_backtest_config(
 ) -> BacktestConfig:
     """Load backtest config from YAML, applying .env overrides.
 
-    Environment variables override YAML keys: ``NTA_STRATEGY_FAST_PERIOD`` etc.
+    ``path`` defaults to the user's ``configs/backtest.yaml`` (or the
+    ``backtest.example.yaml`` template when no copy exists). Environment variables
+    override YAML keys: ``NTA_STRATEGY_FAST_PERIOD`` etc.
     """
-    cfg_path = Path(path) if path else _DEFAULT_CONFIG_PATH
+    cfg_path = Path(path) if path else _default_config_path("backtest")
     raw: dict[str, Any] = {}
     if cfg_path.exists():
         raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
 
-    raw = _merge(_defaults_yaml(), raw)
     raw = _apply_env_overrides(raw, env_prefix)
 
     venue = _build(VenueConfig, raw.get("venue", {}))
@@ -167,8 +181,12 @@ def load_param_config(
     path: str | Path | None = None,
     env_prefix: str = "NTA_",
 ) -> ParamScanConfig:
-    """Load parameter scan config from YAML (.env unused for grids)."""
-    cfg_path = Path(path) if path else Path(__file__).parent / "configs" / "param.yaml"
+    """Load parameter scan config from YAML (.env unused for grids).
+
+    ``path`` defaults to the user's ``configs/param.yaml`` (or the
+    ``param.example.yaml`` template when no copy exists).
+    """
+    cfg_path = Path(path) if path else _default_config_path("param")
     raw: dict[str, Any] = {}
     if cfg_path.exists():
         raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
@@ -180,24 +198,6 @@ def load_param_config(
         output_path=raw.get("output_path", "output"),
         log_level=raw.get("log_level", "WARNING"),
     )
-
-
-def _defaults_yaml() -> dict[str, Any]:
-    return {
-        "venue": {"name": "SIM", "oms_type": "NETTING", "account_type": "MARGIN",
-                  "base_currency": "USD", "starting_balance": 100_000.0, "default_leverage": 10},
-        "instrument": {"asset_class": "FX",
-                       "instrument_id": "EUR/USD.SIM", "raw_symbol": "EUR/USD"},
-        "strategy": {"name": "ema_cross", "strategy_id": "EMA-001", "trade_size": "10000",
-                     "fast_period": 10, "slow_period": 30,
-                     "bar_type": "EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL"},
-        "data": {"instrument_id": "EUR/USD.SIM", "count": 2000, "seed": None,
-                 "catalog_path": "docs/data", "bar_type": "EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL",
-                 "source": "synthetic", "source_path": None, "tz": "UTC",
-                 "columns": None, "timestamp_col": None},
-        "output_path": "output",
-        "log_level": "INFO",
-    }
 
 
 def _apply_env_overrides(raw: dict[str, Any], prefix: str) -> dict[str, Any]:

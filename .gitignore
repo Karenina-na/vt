@@ -2,6 +2,10 @@
 .venv/
 .env
 
+# User's own config files (copy from configs/*.example.yaml)
+configs/backtest.yaml
+configs/param.yaml
+
 # Python
 __pycache__/
 *.py[cod]

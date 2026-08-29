@@ -1,4 +1,7 @@
-# ntquant backtest configuration
+# ntquant backtest configuration — TEMPLATE
+# 使用方式：拷贝为 configs/backtest.yaml 后按需修改（用户副本已被 .gitignore 忽略）。
+#   cp configs/backtest.example.yaml configs/backtest.yaml
+# 不拷贝也可运行：所有字段有代码内默认值.
 # asset_class 支持：FX / EQUITY / CRYPTOCURRENCY / FUTURE / INDEX / COMMODITY / CFD
 # venue.account_type 支持：MARGIN（保证金）/ CASH（现货现金账户）
 venue:

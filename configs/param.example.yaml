@@ -1,4 +1,6 @@
-# ntquant parameter scan configuration
+# ntquant parameter scan configuration — TEMPLATE
+# 使用方式：拷贝为 configs/param.yaml 后按需修改（用户副本已被 .gitignore 忽略）。
+#   cp configs/param.example.yaml configs/param.yaml
 # Scan grids over strategy parameters.
 scan:
   fast_period: [5, 10, 15, 20]
@@ -11,6 +13,7 @@ data:
   seed: 1234
   catalog_path: docs/data
   bar_type: EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL
+  source: synthetic
 
 output_path: output
 log_level: WARNING

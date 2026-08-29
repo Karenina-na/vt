@@ -48,7 +48,7 @@
 1. **环境**：使用 `.venv`（uv 创建）。安装依赖用 `uv pip install --python .venv/bin/python <pkg>`。
 2. **实测优先**：任何 API 改动，先 `import` 验证，再写代码，勿凭文档记忆。
 3. **每次运行先在项目根目录**（`pyproject.toml` 所在处）以 `ntquant` 包方式导入。
-4. 数据目录 `docs/data/`、输出 `output/`、配置 `ntquant/configs/`。
+4. 数据目录 `docs/data/`、输出 `output/`、配置 `configs/`（项目根）。
 
 ## 已知坑（1.231.0 实测）
 

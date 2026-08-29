@@ -60,7 +60,7 @@ USDT to USD` 的 PnL 换算警告。
 
 ## 完整切换示例（以 Crypto 为例）
 
-`ntquant/configs/backtest.yaml`：
+`configs/backtest.yaml`：
 
 ```yaml
 venue:

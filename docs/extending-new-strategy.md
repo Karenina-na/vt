@@ -128,7 +128,7 @@ class StrategyConfig:
     overbought: float = 70.0      # 新增
 ```
 
-然后在 `ntquant/configs/backtest.yaml` 的 `strategy` 节加默认值（或用 `.env` 覆盖）：
+然后在 `configs/backtest.yaml` 的 `strategy` 节加默认值（或用 `.env` 覆盖）：
 
 ```yaml
 strategy:

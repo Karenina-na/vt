@@ -53,7 +53,7 @@ make backtest
 等价于：
 
 ```bash
-.venv/bin/python -m ntquant.cli backtest
+.venv/bin/python run.py backtest
 ```
 
 运行 EMA 交叉回测，打印 PnL，并在 `output/` 生成 `run_{orders,fills,positions,account}.csv`。
@@ -65,7 +65,7 @@ make backtest
 make param
 ```
 
-在 `ntquant/configs/param.yaml` 定义扫描网格（如 `fast_period`、`slow_period`、`trade_size`），
+在 `configs/param.yaml` 定义扫描网格（如 `fast_period`、`slow_period`、`trade_size`），
 输出 `output/param_results.csv` 并打印各组合的绩效对比。
 
 ### 3. 报表 + 交互式图表（CLI）
@@ -90,7 +90,7 @@ from ntquant.backtest.runner import run_backtest
 from ntquant.analysis.stats import performance_summary
 from ntquant.analysis.visuals import make_tearsheet
 
-cfg = load_backtest_config("ntquant/configs/backtest.yaml")
+cfg = load_backtest_config("configs/backtest.yaml")
 outcome = run_backtest(cfg)                 # use_catalog=True 可读取数据目录
 print(performance_summary(outcome))         # PnL/胜率/期望/夏普等
 make_tearsheet(outcome, "output/tearsheet.html")
@@ -110,29 +110,36 @@ size = position_size_from_risk(100000, "1.0850", "1.0800", "0.01")  # 1% 风险 
 
 ## 配置
 
-- **`ntquant/configs/backtest.yaml`**：单次回测的 venue / instrument / strategy / data 参数。
-- **`ntquant/configs/param.yaml`**：参数扫描网格 + data 设置。
+- **`configs/backtest.example.yaml`**：单次回测的 venue / instrument / strategy / data 参数模板。
+  运行时拷贝为 `configs/backtest.yaml`（用户副本已 gitignore）再修改。
+- **`configs/param.example.yaml`**：参数扫描网格 + data 设置模板，拷贝为 `configs/param.yaml`。
 - **`.env`**：密钥与覆盖项，格式为 `NTA_<SECTION>__<KEY>=<value>`，例如
-  `NTA_STRATEGY__FAST_PERIOD=15`，会覆盖对应 YAML 项。
+  `NTA_STRATEGY__FAST_PERIOD=15`，会覆盖对应 YAML 项（优先级 env > YAML > 默认值）。
+
+```bash
+make init-config   # 从 *.example.yaml 复制用户配置到 configs/*.yaml
+```
 
 ## 目录结构
 
 ```
 vt/
 ├── pyproject.toml          # 依赖与包元数据（锁定 1.231.0）
+├── run.py                  # 最外层启动脚本（python run.py backtest）
+├── configs/                # 外置配置（*.example.yaml 模板，用户副本 gitignore）
 ├── Makefile                # 常用任务入口
 ├── AGENTS.md               # 项目结构与约定（改动前必读）
 ├── README.md               # 本文档
 ├── docs/
 │   ├── version-notes.md            # Nautilus 1.231.0 实测路径映射与已知坑
 │   ├── extending-new-strategy.md   # 如何新增一个策略
-│   └── supported-instruments.md    # 支持的金融产品与配置
+│   ├── supported-instruments.md    # 支持的金融产品与配置
+│   └── data-ingestion.md           # 如何接入真实数据到 catalog
 ├── ntquant/
 │   ├── config.py           # 类型化配置加载（YAML + NTA_* 环境变量）
-│   ├── cli.py              # CLI: backtest / param / report
+│   ├── cli.py              # CLI: backtest / param / report / ingest
 │   ├── logging.py          # 统一日志
-│   ├── configs/            # backtest.yaml / param.yaml
-│   ├── data/               # synthetic(合成) / catalog(Parquet) / loaders(占位)
+│   ├── data/               # synthetic / catalog / schema / loaders / ingest
 │   ├── strategies/         # base 底座 + ema_cross 示例
 │   ├── backtest/           # runner / parameters / instruments(资产分派)
 │   ├── analysis/           # reports / stats / tearsheet

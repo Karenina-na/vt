@@ -11,7 +11,11 @@ from ntquant.config import BacktestConfig, ParamScanConfig
 
 
 def _build_config(base: BacktestConfig, params: dict[str, Any]) -> BacktestConfig:
-    """Return a new BacktestConfig overriding strategy parameters."""
+    """Return a new BacktestConfig overriding strategy parameters.
+
+    The ``data`` section is preserved in full (source/tz/columns/timestamp_col are
+    carried through) so a real-data scan still resolves the catalog.
+    """
     s = base.strategy
     new_strategy = type(s)(
         name=s.name,
@@ -21,12 +25,18 @@ def _build_config(base: BacktestConfig, params: dict[str, Any]) -> BacktestConfi
         slow_period=int(params.get("slow_period", s.slow_period)),
         bar_type=s.bar_type,
     )
-    new_data = type(base.data)(
-        instrument_id=base.data.instrument_id,
-        count=base.data.count,
-        seed=base.data.seed,
-        catalog_path=base.data.catalog_path,
-        bar_type=base.data.bar_type,
+    d = base.data
+    new_data = type(d)(
+        instrument_id=d.instrument_id,
+        count=d.count,
+        seed=d.seed,
+        catalog_path=d.catalog_path,
+        bar_type=d.bar_type,
+        source=d.source,
+        source_path=d.source_path,
+        tz=d.tz,
+        columns=d.columns,
+        timestamp_col=d.timestamp_col,
     )
     return BacktestConfig(
         venue=base.venue,
