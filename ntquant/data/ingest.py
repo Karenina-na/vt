@@ -62,6 +62,11 @@ def ingest(config: BacktestConfig, source_name: str | None = None, **source_kwar
     if frame is None or len(frame) == 0:
         raise ValueError(f"Source '{source_key}' returned no data.")
 
+    # Real exchange data may carry more decimals than the instrument's precision
+    # (e.g. Binance volume with 4dp vs size_precision=3). Round price/volume to
+    # the instrument's declared precision so BarDataWrangler accepts the frame.
+    frame = _round_to_instrument(frame, instrument)
+
     bars = BarDataWrangler(bar_type, instrument).process(frame)
 
     catalog = DataCatalog(config.data.catalog_path)
@@ -76,6 +81,26 @@ def ingest(config: BacktestConfig, source_name: str | None = None, **source_kwar
         bar_type=str(bar_type),
         merged=True,
     )
+
+
+def _round_to_instrument(frame, instrument):
+    """Round OHLCV values to the instrument's price/size precision.
+
+    ``BarDataWrangler`` rejects frames whose decimal places exceed the
+    instrument's ``price_precision``/``size_precision`` (e.g. Binance volume with
+    4dp vs ``size_precision=3``). Rounding beforehand keeps real exchange data
+    compliant regardless of the source's raw precision.
+    """
+    import pandas as pd
+
+    df = frame.copy()
+    price_cols = ["open", "high", "low", "close"]
+    for col in price_cols:
+        if col in df.columns:
+            df[col] = df[col].round(getattr(instrument, "price_precision", 2))
+    if "volume" in df.columns:
+        df["volume"] = df["volume"].round(getattr(instrument, "size_precision", 2))
+    return df
 
 
 def ensure_catalog(config: BacktestConfig) -> Path:

@@ -92,3 +92,30 @@ def test_runner_raises_if_real_source_empty(tmp_path):
     bt = make_bar_type(cfg.data.bar_type)
     with pytest.raises(ValueError, match="Run `ntquant ingest"):
         _load_bars(cfg, bt, use_catalog=False)
+
+
+def test_round_to_instrument_precision():
+    # Real data may carry more decimals than the instrument precision; the frame
+    # must be rounded so BarDataWrangler accepts it.
+    from ntquant.backtest.instruments import make_instrument
+    from ntquant.data.ingest import _round_to_instrument
+
+    cfg = load_backtest_config()
+    inst = make_instrument(cfg)
+    df = pd.DataFrame({
+        "open": [2451.80001],
+        "high": [2454.29001],
+        "low": [2446.68001],
+        "close": [2447.30001],
+        "volume": [18893.89001],
+    }, index=pd.DatetimeIndex(["2026-01-01T00:00:00Z"], tz="UTC"))
+    out = _round_to_instrument(df, inst)
+    # price_precision=2, size_precision=3
+    assert out["close"].iloc[0] == pytest.approx(2447.30, abs=1e-9)
+    assert out["volume"].iloc[0] == pytest.approx(18893.890, abs=1e-9)
+    # a round-trip through the wrangler now succeeds without read-only errors.
+    bar_type = make_bar_type(cfg.data.bar_type)
+    from nautilus_trader.persistence.wranglers import BarDataWrangler
+
+    bars = BarDataWrangler(bar_type, inst).process(out)
+    assert len(bars) == 1
