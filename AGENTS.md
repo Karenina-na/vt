@@ -14,7 +14,7 @@
 - Python 3.12，**uv 管理的 `.venv`**（项目根，`pyproject.toml` 所在目录）。
 - 安装依赖：`uv pip install --python .venv/bin/python -e ".[dev]"`。
 - 关键依赖：`nautilus_trader==1.231.0`（含 `[visualization]` → plotly/kaleido）、
-  PyYAML、python-dotenv、pytest。
+  PyYAML、python-dotenv、requests[socks]、pytest。
 - 运行入口：`.venv/bin/python run.py <cmd>` 或 `make <cmd>`。
 
 ## 目录结构

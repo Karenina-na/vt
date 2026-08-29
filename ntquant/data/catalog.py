@@ -81,3 +81,12 @@ class DataCatalog:
     def list_instruments(self) -> list:
         """Return all instrument IDs stored in the catalog."""
         return self.catalog.instruments()
+
+    def delete_bars(self, bar_type, start=None, end=None) -> None:
+        """Delete bars for ``bar_type`` within an optional start/end range (ns)."""
+        self.catalog.delete_data_range(
+            data_cls=Bar,
+            identifier=str(bar_type),
+            start=start,
+            end=end,
+        )

@@ -85,11 +85,12 @@ class BinanceKlineSource:
     }
 
     def __init__(self, timeout: float = 30.0, limit: int = 1000, market: str = "spot",
-                 proxy: str | None = None) -> None:
+                 proxy: str | None = None, chunk_size: int = 1000) -> None:
         self.timeout = timeout
         self.limit = limit
         self.market = market.lower()
         self.proxy = proxy
+        self.chunk_size = chunk_size
 
     @property
     def _base_url(self) -> str:
@@ -129,19 +130,48 @@ class BinanceKlineSource:
             raw = raw.split("-")[0]
         return "".join(ch for ch in raw if ch.isalnum()).upper()
 
-    def _fetch(self, url: str, proxy: str | None = None) -> list:
-        import json
-        import urllib.request
+    def _fetch(self, url: str, proxy: str | None = None, retries: int = 4) -> list:
+        import time
 
-        req = urllib.request.Request(url, headers={"User-Agent": "ntquant/0.1"})
+        import requests
+
         proxy = proxy or self.proxy
+        proxies = None
         if proxy:
-            handler = urllib.request.ProxyHandler({"http": proxy, "https": proxy})
-            opener = urllib.request.build_opener(handler)
-            with opener.open(req, timeout=self.timeout) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            # requests[socks] handles http:// https:// and socks5/socks5h://.
+            proxies = {"http": proxy, "https": proxy}
+
+        headers = {"User-Agent": "ntquant/0.1"}
+        last_exc = None
+        for attempt in range(retries):
+            try:
+                resp = requests.get(url, headers=headers, proxies=proxies, timeout=self.timeout)
+                resp.raise_for_status()
+                return resp.json()
+            except Exception as exc:  # transient network/proxy errors
+                last_exc = exc
+                if attempt < retries - 1:
+                    time.sleep(1 + attempt)
+        raise last_exc
+
+    def _kline_url(self, symbol: str, interval: str, limit: int,
+                   start_ms: int | None = None, end_ms: int | None = None,
+                   market: str | None = None) -> str:
+        base = self.BASE_URL_FUTURES if (market or self.market) == "perpetual" else self.BASE_URL
+        url = f"{base}?symbol={symbol}&interval={interval}&limit={limit}"
+        if start_ms is not None:
+            url += f"&startTime={start_ms}"
+        if end_ms is not None:
+            url += f"&endTime={end_ms}"
+        return url
+
+    def _rows(self, symbol: str, interval: str, limit: int,
+              start_ms: int | None = None, end_ms: int | None = None,
+              market: str | None = None) -> list:
+        return self._fetch(
+            self._kline_url(symbol, interval, limit, start_ms, end_ms, market),
+            proxy=self.proxy,
+        )
 
     def load(self, config: BacktestConfig, **kwargs: Any) -> Any:
         import pandas as pd
@@ -155,8 +185,16 @@ class BinanceKlineSource:
         raw = str(getattr(config.instrument, "raw_symbol", "") or "")
         if "PERP" in raw.upper():
             market = "perpetual"
-        url = f"{self._base_url if market == 'perpetual' else self.BASE_URL}?symbol={symbol}&interval={interval}&limit={limit}"
-        rows = self._fetch(url, proxy=config.data.proxy)
+        # Prefer the config-level proxy (overrides any constructor value).
+        if getattr(config.data, "proxy", None):
+            self.proxy = config.data.proxy
+
+        # Pagination window: either from an explicit start/end (ms or ISO str) or
+        # from a bar count (`limit` treated as 'fetch that many bars' via count).
+        start_ms = self._to_ms(kwargs.get("start") or kwargs.get("start_ms"))
+        end_ms = self._to_ms(kwargs.get("end") or kwargs.get("end_ms"))
+        rows = self._fetch_range(symbol, interval, limit, start_ms, end_ms,
+                                 kwargs.get("limit_total"), market)
 
         # Binance kline:
         # [open_time(ms), open, high, low, close, volume, close_time, quote_volume,
@@ -173,6 +211,79 @@ class BinanceKlineSource:
         df = df.set_index("ts")
         df = df.drop(columns=["open_time", "close_time"], errors="ignore")
         return normalize_ohlcv_frame(df, tz=config.data.tz)
+
+    @staticmethod
+    def _to_ms(value) -> int | None:
+        """Coerce a ms/ns ISO string or epoch int to milliseconds."""
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        import pandas as pd
+
+        ts = pd.Timestamp(value)
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        return int(ts.timestamp() * 1000)
+
+    def _fetch_range(self, symbol: str, interval: str, limit: int,
+                     start_ms: int | None, end_ms: int | None,
+                     limit_total: int | None, market: str | None = None) -> list:
+        """Paged fetch over [start_ms, end_ms] or up to ``limit_total`` bars.
+
+        Binance returns at most ``limit`` (<=1000) klines per request. Two paging
+        modes:
+
+        - **Window** (``start_ms``/``end_ms`` given): page *forward* from a
+          ``startTime`` cursor (``last_open_ms + 1``) until ``end``.
+        - **Bar-count** (neither window bound given): page *backward* from the
+          latest bar using an ``endTime`` cursor, returning ``limit_total``
+          most-recent bars (or ``limit`` when ``limit_total`` is unset).
+        """
+        all_rows: list = []
+
+        if start_ms is None and end_ms is None:
+            # Backward paging: newest bars first, using an endTime cursor.
+            total = limit_total if limit_total is not None else limit
+            cursor = None
+            while len(all_rows) < total:
+                page_limit = min(self.chunk_size, total - len(all_rows))
+                page = self._rows(symbol, interval, page_limit, None, cursor, market)
+                if not page:
+                    break
+                all_rows.extend(page)
+                oldest_open = page[0][0]
+                cursor = oldest_open - 1
+                if cursor is None:
+                    break
+                if len(page) < page_limit:
+                    break
+            # Return chronological ascending.
+            return all_rows[:total]
+
+        # Forward window paging: startTime cursor until end_ms.
+        total = limit_total if limit_total is not None else None
+        cursor = start_ms
+        while True:
+            page_limit = self.chunk_size if end_ms is not None else min(limit, self.chunk_size)
+            page = self._rows(symbol, interval, page_limit, cursor, end_ms, market)
+            if not page:
+                break
+            all_rows.extend(page)
+
+            last_open = page[-1][0]
+            cursor = last_open + 1
+
+            if end_ms is not None and cursor > end_ms:
+                break
+            if total is not None and len(all_rows) >= total:
+                break
+            if len(page) < page_limit:
+                break
+            if cursor is None:
+                break
+
+        return all_rows[:total] if total is not None else all_rows
 
 
 class KeyedDataProvider:

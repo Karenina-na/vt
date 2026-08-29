@@ -8,6 +8,7 @@ dependencies = [
     "nautilus_trader[visualization]==1.231.0",
     "PyYAML>=6.0",
     "python-dotenv>=1.0",
+    "requests[socks]>=2.31",
 ]
 
 [project.optional-dependencies]

@@ -119,3 +119,62 @@ def test_round_to_instrument_precision():
 
     bars = BarDataWrangler(bar_type, inst).process(out)
     assert len(bars) == 1
+
+
+def _kline_page(start_ms, span_ms=15 * 60 * 1000, count=3):
+    """Synthesize a page of Binance klines starting at start_ms (ascending)."""
+    rows = []
+    for i in range(count):
+        t = start_ms + i * span_ms
+        rows.append([t, "1.0", "1.0", "1.0", "1.0", "10.0", t + 599999, "0", 0, "0", "0", "0"])
+    return rows
+
+
+def test_fetch_range_window_pages_forward(monkeypatch):
+    # A window larger than chunk size must page forward via startTime cursor.
+    from ntquant.data.loaders import BinanceKlineSource
+
+    s = BinanceKlineSource(proxy=None)
+    calls = []
+
+    def fake_rows(symbol, interval, limit, start_ms=None, end_ms=None, market=None):
+        calls.append(start_ms)
+        if start_ms is None:
+            return []
+        return _kline_page(start_ms, count=limit)
+
+    span = 15 * 60 * 1000  # 15m
+    monkeypatch.setattr(s, "_rows", fake_rows, raising=True)
+    # 3 pages of limit bars; end beyond the cursor so the loop stops when the
+    # returned page is shorter than requested, or end_ms is reached.
+    rows = s._fetch_range("ETHUSDT", "15m", 1000, start_ms=1000,
+                          end_ms=1000 + 3 * 1000 * span, limit_total=None,
+                          market="perpetual")
+    assert len(calls) >= 2
+    # Cursor must advance monotonically over the pages.
+    assert calls == sorted(calls)
+    # The rows must be non-empty and ascending.
+    assert len(rows) >= 1000
+
+
+def test_fetch_range_bar_count_pages_backward(monkeypatch):
+    # A bar-count (limit_total) request with no window must page backward (newest first).
+    from ntquant.data.loaders import BinanceKlineSource
+
+    s = BinanceKlineSource(proxy=None)
+    calls = []
+
+    def fake_rows(symbol, interval, limit, start_ms=None, end_ms=None, market=None):
+        calls.append(end_ms)
+        if end_ms is None:
+            return _kline_page(9000, count=limit)
+        # Each older page sits just before the endTime cursor.
+        return _kline_page(end_ms - limit * span + 1, count=limit)
+
+    span = 15 * 60 * 1000  # 15m
+    monkeypatch.setattr(s, "_rows", fake_rows, raising=True)
+    rows = s._fetch_range("ETHUSDT", "15m", 1000, start_ms=None, end_ms=None,
+                          limit_total=9, market="perpetual")
+    assert len(rows) == 9
+    # Backward paging: endTime cursor strictly decreases over calls.
+    assert calls == sorted(calls, reverse=True)

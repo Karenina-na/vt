@@ -74,7 +74,14 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
     from ntquant.data.ingest import ingest
 
     cfg = load_backtest_config(args.config)
-    outcome = ingest(cfg, source_name=args.source)
+    outcome = ingest(
+        cfg,
+        source_name=args.source,
+        start=args.start,
+        end=args.end,
+        limit_total=args.limit,
+        overwrite=args.overwrite,
+    )
     print(outcome.summary())
     return 0
 
@@ -101,6 +108,14 @@ def build_parser() -> argparse.ArgumentParser:
     ing.add_argument("--config", default=None, help="path to backtest YAML")
     ing.add_argument("--source", default=None,
                      help="override data.source (csv/parquet/binance/polygon/... )")
+    ing.add_argument("--start", default=None,
+                     help="window start (ISO datetime or ms epoch), paged fetch")
+    ing.add_argument("--end", default=None,
+                     help="window end (ISO datetime or ms epoch), paged fetch")
+    ing.add_argument("--limit", type=int, default=None,
+                     help="total bars to fetch (paged) when no --end window")
+    ing.add_argument("--overwrite", action="store_true",
+                     help="delete existing bars for this symbol before writing")
     ing.set_defaults(func=_cmd_ingest)
 
     return parser

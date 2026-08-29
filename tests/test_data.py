@@ -176,60 +176,57 @@ def test_keyed_providers_raise_without_key():
 
 
 def test_binance_fetch_uses_proxy_when_set(monkeypatch):
-    import urllib.request
+    import requests
 
     from ntquant.data.loaders import BinanceKlineSource
 
-    handlers = []
+    captured = {}
 
     class _DummyResp:
-        def __enter__(self):
-            return self
+        status_code = 200
 
-        def __exit__(self, *a):
-            return False
+        def raise_for_status(self):
+            return None
 
-        def read(self):
-            return b"[]"
+        def json(self):
+            return []
 
-    class _DummyOpener:
-        def open(self, req, timeout=None):
-            return _DummyResp()
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        captured["proxies"] = kwargs.get("proxies")
+        return _DummyResp()
 
-    def fake_build_opener(*hs):
-        handlers.extend(hs)
-        return _DummyOpener()
-
-    monkeypatch.setattr(urllib.request, "build_opener", fake_build_opener)
-    s = BinanceKlineSource(proxy="http://127.0.0.1:7890")
+    monkeypatch.setattr(requests, "get", fake_get)
+    s = BinanceKlineSource(proxy="socks5h://127.0.0.1:1082")
     s._fetch("https://example.com/klines")
 
-    assert any(isinstance(h, urllib.request.ProxyHandler) for h in handlers)
-    # ProxyHandler should carry both http and https mappings.
-    proxy_handler = next(h for h in handlers if isinstance(h, urllib.request.ProxyHandler))
-    assert proxy_handler.proxies["http"] == "http://127.0.0.1:7890"
-    assert proxy_handler.proxies["https"] == "http://127.0.0.1:7890"
+    assert captured["proxies"] == {
+        "http": "socks5h://127.0.0.1:1082",
+        "https": "socks5h://127.0.0.1:1082",
+    }
 
 
-def test_binance_fetch_no_proxy_uses_urlopen(monkeypatch):
-    import urllib.request
+def test_binance_fetch_no_proxy_uses_plain_get(monkeypatch):
+    import requests
 
     from ntquant.data.loaders import BinanceKlineSource
 
-    opened = []
+    captured = {}
 
     class _DummyResp:
-        def __enter__(self):
-            return self
+        status_code = 200
 
-        def __exit__(self, *a):
-            return False
+        def raise_for_status(self):
+            return None
 
-        def read(self):
-            return b"[]"
+        def json(self):
+            return []
 
-    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None: _DummyResp())
-    monkeypatch.setattr(urllib.request, "build_opener", lambda *hs: opened.append("called"))
+    def fake_get(url, **kwargs):
+        captured["url"] = url
+        captured["proxies"] = kwargs.get("proxies")
+        return _DummyResp()
+
+    monkeypatch.setattr(requests, "get", fake_get)
     BinanceKlineSource()._fetch("https://example.com/klines")
-    # No proxy path -> build_opener must not be used.
-    assert opened == []
+    assert captured["proxies"] is None

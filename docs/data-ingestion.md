@@ -120,6 +120,22 @@ data:
 也支持环境变量 `NTA_DATA__PROXY=http://127.0.0.1:7890` 覆盖。代理仅影响网络型数据源
 （当前为 `BinanceKlineSource`），本地 `csv`/`parquet` 不受影响。
 
+## 分页拉取
+
+Binance 单次返回最多 1000 根 K 线。`ingest` 支持分页：给出 `--start`/`--end`（ISO 时间或
+毫秒）走**时间窗口**模式；只给 `--limit` 走**条数**模式（自动向前翻页）。
+
+```bash
+# 拉取整个时间窗口（自动分页）
+.venv/bin/python run.py ingest --start 2026-06-01T00:00:00Z --end 2026-08-29T23:59:00Z
+
+# 拉最近 3000 根（条数模式，自动向前分页）
+.venv/bin/python run.py ingest --limit 3000
+
+# 重复拉取同一窗口时，用 --overwrite 先删旧数据再写，避免区间重叠报错
+.venv/bin/python run.py ingest --start ... --end ... --overwrite
+```
+
 ## 回测使用真实数据
 
 回测只关心 `data.source`：非 `synthetic` 一律从 catalog 读取，**无需** `--catalog` 标志。

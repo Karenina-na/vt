@@ -36,12 +36,21 @@ class IngestOutcome:
         )
 
 
-def ingest(config: BacktestConfig, source_name: str | None = None, **source_kwargs) -> IngestOutcome:
+def ingest(config: BacktestConfig, source_name: str | None = None,
+           start=None, end=None, limit_total: int | None = None,
+           overwrite: bool = False, **source_kwargs) -> IngestOutcome:
     """Fetch, normalise and persist real data for a given backtest config.
 
     Args:
         config: Backtest configuration (instrument, data, venue).
         source_name: Override ``config.data.source`` when provided.
+        start: Optional start of the fetch window (ISO string or ms epoch int).
+        end: Optional end of the fetch window (ISO string or ms epoch int).
+        limit_total: Optional total number of bars to fetch when a whole window is
+            not specified (paged); defaults to a single page.
+        overwrite: If True, delete the existing bars for this bar type before
+            writing, so re-fetching a window replaces stale/overlapping data instead
+            of raising a non-disjoint interval error.
         **source_kwargs: Passed through to ``get_source`` (e.g. ``limit``).
 
     Returns:
@@ -58,7 +67,14 @@ def ingest(config: BacktestConfig, source_name: str | None = None, **source_kwar
     bar_type = make_bar_type(config.data.bar_type or config.strategy.bar_type)
 
     source = get_source(source_key, **source_kwargs)
-    frame = source.load(config)
+    load_kwargs = {}
+    if start is not None:
+        load_kwargs["start"] = start
+    if end is not None:
+        load_kwargs["end"] = end
+    if limit_total is not None:
+        load_kwargs["limit_total"] = limit_total
+    frame = source.load(config, **load_kwargs)
     if frame is None or len(frame) == 0:
         raise ValueError(f"Source '{source_key}' returned no data.")
 
@@ -70,6 +86,9 @@ def ingest(config: BacktestConfig, source_name: str | None = None, **source_kwar
     bars = BarDataWrangler(bar_type, instrument).process(frame)
 
     catalog = DataCatalog(config.data.catalog_path)
+    if overwrite:
+        # Replace stale data to avoid the catalog's non-disjoint interval error.
+        catalog.delete_bars(bar_type)
     # 1.231.0: instruments must be persisted with data via write_data.
     catalog.write_data([instrument] + bars)
     catalog.merge_bars(data_cls=Bar, identifier=str(bar_type), deduplicate=True)
