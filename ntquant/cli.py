@@ -5,6 +5,7 @@ Subcommands:
 - param:    grid-search strategy parameters, print/save results.
 - report:   generate CSV reports + HTML tearsheet from a backtest.
 - ingest:   fetch external OHLCV data into the catalog.
+- research: evaluate a factor across symbols and a time window (six metrics).
 """
 from __future__ import annotations
 
@@ -86,6 +87,36 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_research(args: argparse.Namespace) -> int:
+    from ntquant.config import load_backtest_config
+    from ntquant.research.factors import SUPPORTED_FACTORS
+    from ntquant.research.runner import run_factor_evaluation
+    from ntquant.research.symbols import SUPPORTED_SYMBOLS
+
+    if args.strategy not in SUPPORTED_FACTORS:
+        print(f"Unknown factor '{args.strategy}'. Registered: {sorted(SUPPORTED_FACTORS)}")
+        return 1
+
+    symbols = args.symbols.split(",") if args.symbols else list(SUPPORTED_SYMBOLS)
+    cfg = load_backtest_config(args.config)
+    result = run_factor_evaluation(
+        factor=args.strategy,
+        symbols=symbols,
+        base=cfg,
+        market=args.market,
+        start=args.start,
+        end=args.end,
+    )
+    print(result.frame.to_string(index=False))
+
+    out = Path(cfg.output_path)
+    out.mkdir(parents=True, exist_ok=True)
+    dest = out / f"research_{args.strategy}_{args.market}.csv"
+    result.to_csv(str(dest))
+    print(f"\nSaved research table to {dest}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ntquant", description="NautilusTrader quant scaffold")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -117,6 +148,16 @@ def build_parser() -> argparse.ArgumentParser:
     ing.add_argument("--overwrite", action="store_true",
                      help="delete existing bars for this symbol before writing")
     ing.set_defaults(func=_cmd_ingest)
+
+    rs = sub.add_parser("research", help="evaluate a factor across symbols/time window")
+    rs.add_argument("--config", default=None, help="path to backtest YAML")
+    rs.add_argument("--strategy", default="ema_cross", help="factor/strategy name")
+    rs.add_argument("--symbols", default=None, help="comma-separated symbols (default: all)")
+    rs.add_argument("--market", default="perp", choices=["perp", "spot"],
+                    help="data market (perp default; spot covers pre-2020)")
+    rs.add_argument("--start", default=None, help="window start (ISO datetime)")
+    rs.add_argument("--end", default=None, help="window end (ISO datetime)")
+    rs.set_defaults(func=_cmd_research)
 
     return parser
 

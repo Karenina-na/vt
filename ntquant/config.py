@@ -101,6 +101,8 @@ class DataConfig:
     ``timestamp_col`` names the source timestamp column when it is not the index.
     ``proxy`` is an HTTP/HTTPS proxy URL (e.g. ``http://127.0.0.1:7890``) used by
     network-based sources (Binance) to reach geoblocked endpoints.
+    ``start``/``end`` optionally slice catalog bars to a time window (ISO datetime
+    strings), used by the research runner to constrain a backtest period.
     """
 
     instrument_id: str = "EUR/USD.SIM"
@@ -114,6 +116,8 @@ class DataConfig:
     columns: dict[str, str] | None = None
     timestamp_col: str | None = None
     proxy: str | None = None
+    start: str | None = None
+    end: str | None = None
 
 
 @dataclass(frozen=True)

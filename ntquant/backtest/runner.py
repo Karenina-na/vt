@@ -201,7 +201,9 @@ def _load_bars(config: BacktestConfig, bar_type, use_catalog: bool) -> list:
 
         catalog = DataCatalog(config.data.catalog_path)
         instrument_id = config.data.instrument_id
-        bars = catalog.load_bars(instrument_id, bar_type)
+        start_ns = _to_ns(config.data.start)
+        end_ns = _to_ns(config.data.end)
+        bars = catalog.load_bars(instrument_id, bar_type, start=start_ns, end=end_ns)
         if bars:
             return bars
         if real_source:
@@ -220,3 +222,15 @@ def _load_bars(config: BacktestConfig, bar_type, use_catalog: bool) -> list:
         price_precision=inst.price_precision,
         volume_precision=inst.size_precision,
     )
+
+
+def _to_ns(value) -> int | None:
+    """Coerce an ISO datetime string (or None) to nanoseconds since epoch."""
+    if value is None:
+        return None
+    import pandas as pd
+
+    ts = pd.Timestamp(value)
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return int(ts.value)

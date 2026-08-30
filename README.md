@@ -28,6 +28,8 @@
 - **回测引擎**：封装低层 `BacktestEngine`，自动构建 SIM venue / instrument / 策略 / 数据，
   收集订单、成交、持仓、账户四大报表与绩效统计。
 - **参数扫描**：零依赖 `itertools` 网格搜索，自动聚合 PnL / 胜率 / 期望 / 夏普等指标成表。
+- **因子研究**：`research` 子命令，对「因子 × 品种 × 时间窗」跑回测并输出固定六项
+  （PnL / 收益% / 胜率 / 盈亏比 / 夏普 / 最大回撤），支持 BTC/ETH/SOL 多品种对比与 perp/spot 切换。
 - **分析与可视化**：`ReportProvider` CSV 报表 + `performance_summary` 绩效摘要 +
   交互式 Plotly HTML tearsheet（净值/回撤/月度收益等）。
 - **风控工具**：按账户风险计算仓位、`RiskEngineConfig` 工厂（含 1.231.0 bug 规避）。

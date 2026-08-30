@@ -29,7 +29,8 @@ SYMBOLS = {"BTC": (BTC, 2, 6, "60000.00"), "ETH": (ETH, 2, 6, "3500.00"), "SOL":
 
 def make_spot_cfg(symbol):
     base_cur, pp, sp, start_px = SYMBOLS[symbol]
-    iid = f"{symbol}USDT.BINANCE-SPOT"
+    # Venue must be hyphen-free (1.231.0 treats "-SPOT" as an account subtype).
+    iid = f"{symbol}USDT.BINANCESPOT"
     raw = f"{symbol}USDT"
     bt = f"{iid}-15-MINUTE-LAST-EXTERNAL"
     # Point the loader's symbol at the spot pair (no "-PERP" -> spot endpoint).
@@ -42,7 +43,7 @@ def make_spot_cfg(symbol):
 def make_spot_instrument(symbol):
     base_cur, pp, sp, _ = SYMBOLS[symbol]
     return CurrencyPair(
-        instrument_id=InstrumentId.from_str(f"{symbol}USDT.BINANCE-SPOT"),
+        instrument_id=InstrumentId.from_str(f"{symbol}USDT.BINANCESPOT"),
         raw_symbol=Symbol(f"{symbol}USDT"),
         base_currency=base_cur,
         quote_currency=USDT,

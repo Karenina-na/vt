@@ -57,11 +57,16 @@ vt/
 │   │   ├── reports.py       # ReportProvider CSV 报表
 │   │   ├── stats.py         # 绩效统计（PnL/胜率/夏普等）
 │   │   └── visuals.py       # 交互式 HTML tearsheet
+│   ├── research/
+│   │   ├── symbols.py       # 品种表 + spot/perp instrument & bar_type 工厂
+│   │   ├── metrics.py       # 固定六项（PnL/收益%/胜率/盈亏比/夏普/回撤）
+│   │   ├── factors.py       # 因子（Strategy 子类）注册表 + build_strategy
+│   │   └── runner.py        # 多品种×时间窗因子评估（run_factor_evaluation）
 │   ├── risk/
 │   │   └── __init__.py      # 仓位计算 + RiskEngineConfig 工厂（含 bug 规避）
 │   └── live/
 │       └── __init__.py      # 实盘占位（phase 2 接入 LiveNode + adapter）
-└── tests/                   # pytest 单测（数据/配置/策略/回测/ingest 端到端）
+└── tests/                   # pytest 单测（数据/配置/策略/回测/ingest/research 端到端）
 ```
 
 ## 常用命令
@@ -77,6 +82,16 @@ vt/
 | `make clean` | 清空 `output/`、`docs/data/` |
 | `make init` | 从 `.env.example` 复制 `.env` |
 | `make init-config` | 从 `configs/*.example.yaml` 复制用户配置到 `configs/*.yaml` |
+
+研究评估（因子 × 品种 × 时间窗，固定六项）：
+
+```bash
+.venv/bin/python run.py research --strategy ema_cross --symbols BTC,ETH,SOL \
+    --market perp --start 2023-01-01 --end 2024-01-01
+# --market spot 用现货（覆盖 2018 起）；六项 = PnL/收益%/胜率/盈亏比/夏普/回撤
+```
+
+> Venue 名不能含连字符：1.231.0 会把 `BINANCE-SPOT` 视作账户子类型导致 issuer 不匹配，spot 数据统一存为 `.BINANCESPOT`。
 
 ## 配置约定
 
