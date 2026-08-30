@@ -1,8 +1,14 @@
-"""Fetch 4 years of 15m klines for the given symbols and persist to the catalog.
+"""Fetch several years of 15m klines for the given symbols and persist to the catalog.
 
-Usage: python fetch_4y.py <SYMBOL_OR_ALL>   e.g. BTC | ETH | SOL | ALL
+Usage: python fetch_4y.py <SYMBOL_OR_ALL> [START_YEAR] [START_MONTH]
+
+    python fetch_4y.py ALL           # from 2018-01 (default)
+    python fetch_4y.py ALL 2020 9    # from 2020-09
 """
-import dataclasses, os, sys, time
+import sys
+
+import dataclasses
+import time
 
 from ntquant.backtest.instruments import make_bar_type, make_instrument
 from ntquant.config import load_backtest_config
@@ -35,8 +41,8 @@ def make_cfg(symbol):
     return dataclasses.replace(BASE, instrument=inst, data=data, strategy=strat)
 
 
-def months():
-    y, m = 2022, 9
+def months(start_year=2018, start_month=1):
+    y, m = start_year, start_month
     out = []
     while (y, m) <= (2026, 8):
         ny, nm = (y, m + 1) if m < 12 else (y + 1, 1)
@@ -46,16 +52,16 @@ def months():
     return out
 
 
-def fetch(symbol):
+def fetch(symbol, start_year=2018, start_month=1):
     import pandas as pd
     cfg = make_cfg(symbol)
     instrument = make_instrument(cfg)
     bar_type = make_bar_type(cfg.data.bar_type)
     src = get_source("binance")
     frames = []
-    ms = months()
+    ms = months(start_year, start_month)
     for i, (s, e) in enumerate(ms, 1):
-        for attempt in range(4):
+        for attempt in range(8):
             try:
                 f = src.load(cfg, start=s, end=e)
                 if f is not None and len(f):
@@ -64,7 +70,7 @@ def fetch(symbol):
                 break
             except Exception as ex:
                 print(f"[{symbol}] retry {attempt+1} {s[:7]}: {type(ex).__name__}", flush=True)
-                time.sleep(2)
+                time.sleep(3)
         else:
             print(f"[{symbol}] SKIP {s[:7]}", flush=True)
     frame = pd.concat(frames)
@@ -80,6 +86,8 @@ def fetch(symbol):
 
 def main():
     target = (sys.argv[1] if len(sys.argv) > 1 else "ALL").upper()
+    sy = int(sys.argv[2]) if len(sys.argv) > 2 else 2018
+    sm = int(sys.argv[3]) if len(sys.argv) > 3 else 1
     if target == "ALL":
         syms = list(SYMBOLS)
     elif target in SYMBOLS:
@@ -88,7 +96,7 @@ def main():
         print(f"Unknown symbol '{target}'. Choose: {list(SYMBOLS)} or ALL")
         sys.exit(1)
     for sym in syms:
-        fetch(sym)
+        fetch(sym, sy, sm)
 
 
 if __name__ == "__main__":
