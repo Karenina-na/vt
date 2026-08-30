@@ -89,7 +89,12 @@ vt/
 .venv/bin/python run.py research --strategy ema_cross --symbols BTC,ETH,SOL \
     --market perp --start 2023-01-01 --end 2024-01-01
 # --market spot 用现货（覆盖 2018 起）；六项 = PnL/收益%/胜率/盈亏比/夏普/回撤
+# --param period=7,oversold=25 可覆盖因子的自有参数
 ```
+
+内置因子：`ema_cross` / `rsi_reversal` / `bollinger_reversal` / `roc_momentum` / `macd_cross`。
+新增因子见 [docs/factor-development.md](docs/factor-development.md)（注册进 `research/factors.py`，
+无需改 `make_strategy`）。
 
 > Venue 名不能含连字符：1.231.0 会把 `BINANCE-SPOT` 视作账户子类型导致 issuer 不匹配，spot 数据统一存为 `.BINANCESPOT`。
 

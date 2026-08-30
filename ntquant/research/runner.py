@@ -19,9 +19,10 @@ from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.model.objects import Money
 
 from ntquant.backtest.instruments import make_bar_type, make_instrument
-from ntquant.backtest.runner import BacktestOutcome, build_engine, make_strategy
+from ntquant.backtest.runner import BacktestOutcome, build_engine
 from ntquant.config import BacktestConfig
 from ntquant.data.catalog import DataCatalog
+from ntquant.research.factors import build_factor
 from ntquant.research.metrics import extract_six
 from ntquant.research.symbols import SymbolSpec, get_spec
 
@@ -144,7 +145,13 @@ def _load_window_bars(config: BacktestConfig, start: str | None, end: str | None
     )
 
 
-def _run_window(config: BacktestConfig, start: str | None, end: str | None) -> BacktestOutcome:
+def _run_window(
+    config: BacktestConfig,
+    factor: str,
+    start: str | None,
+    end: str | None,
+    params: dict[str, Any] | None = None,
+) -> BacktestOutcome:
     """Build an engine, feed sliced catalog bars, run, and collect the outcome."""
     venue_name = config.venue.name
     bar_type = make_bar_type(config.strategy.bar_type)
@@ -169,7 +176,8 @@ def _run_window(config: BacktestConfig, start: str | None, end: str | None) -> B
         raise ValueError(f"No catalog bars for {config.data.instrument_id} / {config.data.bar_type}")
     engine.add_data(bars)
 
-    engine.add_strategy(make_strategy(config))
+    strategy = build_factor(factor, config, params)
+    engine.add_strategy(strategy)
     engine.run()
 
     orders = engine.cache.orders()
@@ -196,11 +204,12 @@ def evaluate_factor(
     market: str = "perp",
     start: str | None = None,
     end: str | None = None,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one backtest for factor x symbol and return six metrics + identifiers."""
     spec = get_spec(symbol)
     config = _symbol_config(base, spec, market)
-    outcome = _run_window(config, start, end)
+    outcome = _run_window(config, factor, start, end, params)
 
     metrics = extract_six(outcome)
     row = {
@@ -220,6 +229,7 @@ def run_factor_evaluation(
     market: str = "perp",
     start: str | None = None,
     end: str | None = None,
+    params: dict[str, Any] | None = None,
 ) -> EvaluationResult:
     """Evaluate a factor across symbols; returns a stacked comparison table.
 
@@ -230,7 +240,7 @@ def run_factor_evaluation(
     for symbol in symbols:
         try:
             row = evaluate_factor(
-                factor, symbol, base, market=market, start=start, end=end
+                factor, symbol, base, market=market, start=start, end=end, params=params
             )
             if row["pnl"] is not None or row["pnl_pct"] is not None:
                 rows.append(row)

@@ -30,6 +30,8 @@
 - **参数扫描**：零依赖 `itertools` 网格搜索，自动聚合 PnL / 胜率 / 期望 / 夏普等指标成表。
 - **因子研究**：`research` 子命令，对「因子 × 品种 × 时间窗」跑回测并输出固定六项
   （PnL / 收益% / 胜率 / 盈亏比 / 夏普 / 最大回撤），支持 BTC/ETH/SOL 多品种对比与 perp/spot 切换。
+  内置 5 个经典因子：EMA交叉、RSI均值回归、布林均值回归、ROC动量、MACD；新因子见
+  [docs/factor-development.md](docs/factor-development.md)。
 - **分析与可视化**：`ReportProvider` CSV 报表 + `performance_summary` 绩效摘要 +
   交互式 Plotly HTML tearsheet（净值/回撤/月度收益等）。
 - **风控工具**：按账户风险计算仓位、`RiskEngineConfig` 工厂（含 1.231.0 bug 规避）。

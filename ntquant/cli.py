@@ -89,13 +89,22 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
 
 def _cmd_research(args: argparse.Namespace) -> int:
     from ntquant.config import load_backtest_config
-    from ntquant.research.factors import SUPPORTED_FACTORS
+    from ntquant.research.factors import SUPPORTED_FACTORS, canonical
     from ntquant.research.runner import run_factor_evaluation
     from ntquant.research.symbols import SUPPORTED_SYMBOLS
 
     if args.strategy not in SUPPORTED_FACTORS:
         print(f"Unknown factor '{args.strategy}'. Registered: {sorted(SUPPORTED_FACTORS)}")
         return 1
+
+    # Parse --param k=v,k2=v2 into a dict.
+    params: dict[str, str] = {}
+    if args.param:
+        for item in args.param.split(","):
+            k, _, v = item.partition("=")
+            if not k:
+                continue
+            params[k.strip()] = _coerce_scalar(v.strip())
 
     symbols = args.symbols.split(",") if args.symbols else list(SUPPORTED_SYMBOLS)
     cfg = load_backtest_config(args.config)
@@ -106,12 +115,13 @@ def _cmd_research(args: argparse.Namespace) -> int:
         market=args.market,
         start=args.start,
         end=args.end,
+        params=params or None,
     )
     print(result.frame.to_string(index=False))
 
     out = Path(cfg.output_path)
     out.mkdir(parents=True, exist_ok=True)
-    dest = out / f"research_{args.strategy}_{args.market}.csv"
+    dest = out / f"research_{canonical(args.strategy)}_{args.market}.csv"
     result.to_csv(str(dest))
     print(f"\nSaved research table to {dest}")
     return 0
@@ -157,9 +167,29 @@ def build_parser() -> argparse.ArgumentParser:
                     help="data market (perp default; spot covers pre-2020)")
     rs.add_argument("--start", default=None, help="window start (ISO datetime)")
     rs.add_argument("--end", default=None, help="window end (ISO datetime)")
+    rs.add_argument("--param", default=None,
+                    help="factor params as k=v,k2=v2 (e.g. period=14,oversold=30)")
     rs.set_defaults(func=_cmd_research)
 
     return parser
+
+
+def _coerce_scalar(value: str):
+    """Best-effort scalar coercion for factor param values."""
+    low = value.lower()
+    if low in ("true", "false"):
+        return low == "true"
+    if low in ("null", "none"):
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
 
 
 def main(argv: list[str] | None = None) -> int:
