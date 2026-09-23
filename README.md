@@ -45,9 +45,17 @@ make test
 | 命令 | 用途 |
 |---|---|
 | `make param` | 按 `configs/param.yaml` 的网格扫描参数，写入 `output/param_results.csv` |
-| `make report` | 生成 CSV 报表和 HTML tearsheet |
+| `make report` | 生成 CSV 报表、盈亏 tearsheet 和带买卖点的 K 线 HTML |
 | `make ingest source=csv` | 导入真实数据 |
 | `make test` | 运行测试 |
+
+`report` 也支持临时指定策略和参数：
+
+```bash
+.venv/bin/python run.py report --strategy rsi_reversal --param period=7
+```
+
+结果分别写入 `output/tearsheet.html` 和 `output/trades.html`。
 
 研究命令对指定品种和时间窗输出 PnL、收益率、胜率、盈亏比、夏普和最大回撤：
 

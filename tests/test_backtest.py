@@ -62,3 +62,21 @@ def test_backtest_cli_uses_strategy_from_yaml(tmp_path):
     )
     assert main(["backtest", "--config", str(config)]) == 0
     assert (tmp_path / "run_orders.csv").exists()
+
+
+def test_report_cli_exports_trades_and_performance_html(tmp_path):
+    config = tmp_path / "backtest.yaml"
+    config.write_text(
+        f"data:\n  count: 300\n  seed: 42\n"
+        f"output_path: {tmp_path}\nlog_level: WARNING\n",
+        encoding="utf-8",
+    )
+    assert main([
+        "report", "--config", str(config), "--strategy", "rsi_reversal",
+        "--param", "period=7",
+    ]) == 0
+    assert (tmp_path / "tearsheet.html").exists()
+    trades = (tmp_path / "trades.html").read_text(encoding="utf-8")
+    assert '"type":"candlestick"' in trades
+    assert '"name":"Buy Fills"' in trades
+    assert '"name":"Sell Fills"' in trades

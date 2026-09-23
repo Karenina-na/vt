@@ -3,7 +3,7 @@
 Subcommands:
 - backtest: run a single EMA cross backtest + reports.
 - param:    grid-search strategy parameters, print/save results.
-- report:   generate CSV reports + HTML tearsheet from a backtest.
+- report:   generate CSV reports and interactive HTML performance/trade charts.
 - ingest:   fetch external OHLCV data into the catalog.
 - research: evaluate a factor across symbols and a time window (six metrics).
 """
@@ -64,15 +64,22 @@ def _cmd_param(args: argparse.Namespace) -> int:
 def _cmd_report(args: argparse.Namespace) -> int:
     from ntquant.backtest.runner import run_backtest
     from ntquant.analysis.reports import generate_all_reports
-    from ntquant.analysis.visuals import make_tearsheet
+    from ntquant.analysis.visuals import make_tearsheet, make_trade_chart
 
     cfg = load_backtest_config(args.config)
-    outcome = run_backtest(cfg, use_catalog=True)
+    outcome = run_backtest(
+        cfg,
+        use_catalog=True,
+        strategy_name=args.strategy,
+        strategy_params=_parse_params(args.param),
+    )
     paths = generate_all_reports(outcome, cfg.output_path, prefix="analysis")
     tearsheet = make_tearsheet(outcome, Path(cfg.output_path) / "tearsheet.html")
+    trades = make_trade_chart(outcome, Path(cfg.output_path) / "trades.html")
     for name, path in paths.items():
         print(f"  {name}: {path}")
     print(f"  tearsheet: {tearsheet}")
+    print(f"  trades: {trades}")
     outcome.engine.dispose()
     return 0
 
@@ -148,8 +155,10 @@ def build_parser() -> argparse.ArgumentParser:
     pm.add_argument("--config", default=None, help="path to param YAML")
     pm.set_defaults(func=_cmd_param)
 
-    rp = sub.add_parser("report", help="generate CSV reports + tearsheet")
+    rp = sub.add_parser("report", help="generate CSV reports + interactive HTML charts")
     rp.add_argument("--config", default=None, help="path to backtest YAML")
+    rp.add_argument("--strategy", default=None, help="registered strategy name")
+    rp.add_argument("--param", default=None, help="strategy parameters as k=v,k2=v2")
     rp.set_defaults(func=_cmd_report)
 
     ing = sub.add_parser("ingest", help="fetch external OHLCV data into the catalog")

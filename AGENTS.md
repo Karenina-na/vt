@@ -57,7 +57,7 @@ vt/
 │   ├── analysis/
 │   │   ├── reports.py       # ReportProvider CSV 报表
 │   │   ├── stats.py         # 绩效统计（PnL/胜率/夏普等）
-│   │   └── visuals.py       # 交互式 HTML tearsheet
+│   │   └── visuals.py       # 交互式 HTML 盈亏报表与 K 线买卖点图
 │   ├── research/
 │   │   ├── symbols.py       # 品种表 + spot/perp instrument & bar_type 工厂
 │   │   ├── metrics.py       # 固定六项（PnL/收益%/胜率/盈亏比/夏普/回撤）
@@ -76,7 +76,7 @@ vt/
 | `make install` | 用 uv 安装本项目 + dev 依赖到 `.venv` |
 | `make backtest` | 运行 EMA 交叉回测 + CSV 报表 → `output/` |
 | `make param` | 网格参数扫描 → `output/param_results.csv` |
-| `make report` | 生成 CSV 报表 + HTML tearsheet `output/tearsheet.html` |
+| `make report` | 生成 CSV 报表、HTML 盈亏报表与 K 线买卖点图 → `output/` |
 | `make ingest source=csv` | 从外部来源（csv/parquet/binance）拉真实数据落库到 catalog |
 | `make test` | `pytest tests/` |
 | `make clean` | 清空 `output/`、`docs/data/` |
