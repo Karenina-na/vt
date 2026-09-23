@@ -8,7 +8,7 @@ Precedence (highest first):
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -74,20 +74,13 @@ class InstrumentConfig:
 
 @dataclass(frozen=True)
 class StrategyConfig:
-    """Strategy-level defaults (EMA cross by default).
-
-    ``name`` selects the strategy from the runner registry; ``strategy_id`` gives
-    the instance a unique ID (plain string — required by 1.231.0). Extra params
-    (``fast_period``, ``slow_period``, ...) are passed through to the strategy
-    config; unknown keys are ignored by ``_build``.
-    """
+    """Shared strategy settings and strategy-specific parameters."""
 
     name: str = "ema_cross"
     strategy_id: str = "EMA-001"
     trade_size: str = "10000"
-    fast_period: int = 10
-    slow_period: int = 30
     bar_type: str = "EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL"
+    params: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -138,6 +131,14 @@ def _build(dc_type: type, data: dict[str, Any]) -> Any:
     return dc_type(**{k: v for k, v in data.items() if k in known})
 
 
+def _build_strategy(data: dict[str, Any]) -> StrategyConfig:
+    shared = {item.name for item in fields(StrategyConfig)} - {"params"}
+    return StrategyConfig(
+        **{key: value for key, value in data.items() if key in shared},
+        params={key: value for key, value in data.items() if key not in shared},
+    )
+
+
 def load_backtest_config(
     path: str | Path | None = None,
     env_prefix: str = "NTA_",
@@ -157,7 +158,7 @@ def load_backtest_config(
 
     venue = _build(VenueConfig, raw.get("venue", {}))
     instrument = _build(InstrumentConfig, raw.get("instrument", {}))
-    strategy = _build(StrategyConfig, raw.get("strategy", {}))
+    strategy = _build_strategy(raw.get("strategy", {}))
     data = _build(DataConfig, raw.get("data", {}))
 
     return BacktestConfig(
@@ -208,24 +209,15 @@ def _apply_env_overrides(raw: dict[str, Any], prefix: str) -> dict[str, Any]:
     if not prefix:
         return raw
 
-    section = {"venue": None, "instrument": None, "strategy": None, "data": None}
-
     for key, value in os.environ.items():
         if not key.startswith(prefix):
             continue
-        parts = key[len(prefix):].lower().split("__")
-        top = parts[0]
-        if top in section:
-            nested = section[top]
-            if nested is None:
-                section[top] = {}
-            section[top][parts[1]] = value
-
-    for name, mapping in section.items():
-        if mapping:
-            raw.setdefault(name, {})
-            for k, v in mapping.items():
-                raw[name][k] = _coerce(v)
+        parts = key[len(prefix):].lower().split("__", 1)
+        if len(parts) != 2 or not parts[1]:
+            continue
+        section, field_name = parts
+        if section in {"venue", "instrument", "strategy", "data"}:
+            raw.setdefault(section, {})[field_name] = _coerce(value)
 
     return raw
 

@@ -1,30 +1,18 @@
-"""Research evaluation runner: factor x symbol x time-window.
-
-This module is intentionally standalone: it does not modify the core backtest
-scaffold. For each symbol it builds a per-symbol config, loads catalog bars
-sliced to ``[start, end]`` directly, constructs a low-level ``BacktestEngine``
-(reusing the scaffold's public helpers), and extracts the fixed six metrics.
-"""
+"""Evaluate a strategy across symbols and catalog time windows."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from decimal import Decimal
+from dataclasses import dataclass, replace
 from typing import Any
 
 import pandas as pd
 
-from nautilus_trader.analysis import ReportProvider
-from nautilus_trader.model.enums import AccountType, OmsType
-from nautilus_trader.model.identifiers import Venue
-from nautilus_trader.model.objects import Money
-
-from ntquant.backtest.instruments import make_bar_type, make_instrument
-from ntquant.backtest.runner import BacktestOutcome, build_engine
+from ntquant.backtest.instruments import make_bar_type
+from ntquant.backtest.runner import run_backtest
 from ntquant.config import BacktestConfig
 from ntquant.data.catalog import DataCatalog
-from ntquant.research.factors import build_factor
 from ntquant.research.metrics import extract_six
 from ntquant.research.symbols import SymbolSpec, get_spec
+from ntquant.strategies.registry import canonical
 
 
 @dataclass
@@ -38,33 +26,14 @@ class EvaluationResult:
         return path
 
 
-def _account_type(name: str) -> AccountType:
-    n = name.upper()
-    return getattr(AccountType, n, AccountType.MARGIN)
-
-
-def _currency(code: str):
-    from nautilus_trader.model.objects import Currency
-
-    if not code:
-        from nautilus_trader.model.currencies import USDT
-
-        return USDT
-    try:
-        return Currency.from_str(code)
-    except Exception:  # noqa: BLE001 - fall back to USDT
-        from nautilus_trader.model.currencies import USDT
-
-        return USDT
-
-
 def _symbol_config(
     base: BacktestConfig,
     spec: SymbolSpec,
     market: str,
+    factor: str,
 ) -> BacktestConfig:
     """Derive a single-symbol BacktestConfig from the base config."""
-    from ntquant.config import DataConfig, InstrumentConfig, StrategyConfig, VenueConfig
+    from ntquant.config import DataConfig, InstrumentConfig, VenueConfig
 
     instrument_id = spec.instrument_id(market)
     bar_type = spec.bar_type(market)
@@ -73,7 +42,9 @@ def _symbol_config(
     instrument = InstrumentConfig(
         asset_class="CRYPTOCURRENCY",
         instrument_id=instrument_id,
-        raw_symbol=f"{spec.symbol}USDT-PERP" if market == "perp" else f"{spec.symbol}USDT",
+        raw_symbol=(
+            f"{spec.symbol}USDT-PERP" if market == "perp" else f"{spec.symbol}USDT"
+        ),
         base_currency=str(spec.base_currency),
         quote_currency="USDT",
         settlement_currency="USDT",
@@ -94,12 +65,9 @@ def _symbol_config(
         proxy=base.data.proxy,
     )
 
-    strategy = StrategyConfig(
-        name=base.strategy.name,
-        strategy_id=f"{base.strategy.name}-{spec.symbol}",
-        trade_size=base.strategy.trade_size,
-        fast_period=base.strategy.fast_period,
-        slow_period=base.strategy.slow_period,
+    strategy = replace(
+        base.strategy,
+        strategy_id=f"{canonical(factor)}-{spec.symbol}",
         bar_type=bar_type,
     )
 
@@ -133,7 +101,9 @@ def _to_ns(value: str | None) -> int | None:
     return int(ts.value)
 
 
-def _load_window_bars(config: BacktestConfig, start: str | None, end: str | None) -> list:
+def _load_window_bars(
+    config: BacktestConfig, start: str | None, end: str | None
+) -> list:
     """Load catalog bars for the config's bar_type, sliced to [start, end]."""
     catalog = DataCatalog(config.data.catalog_path)
     bar_type = make_bar_type(config.data.bar_type)
@@ -142,58 +112,6 @@ def _load_window_bars(config: BacktestConfig, start: str | None, end: str | None
         bar_type,
         start=_to_ns(start),
         end=_to_ns(end),
-    )
-
-
-def _run_window(
-    config: BacktestConfig,
-    factor: str,
-    start: str | None,
-    end: str | None,
-    params: dict[str, Any] | None = None,
-) -> BacktestOutcome:
-    """Build an engine, feed sliced catalog bars, run, and collect the outcome."""
-    venue_name = config.venue.name
-    bar_type = make_bar_type(config.strategy.bar_type)
-    instrument = make_instrument(config)
-
-    account_type = _account_type(config.venue.account_type)
-    base_currency = _currency(config.venue.base_currency)
-
-    engine = build_engine(config)
-    engine.add_venue(
-        venue=Venue(venue_name),
-        oms_type=OmsType.NETTING,
-        account_type=account_type,
-        base_currency=base_currency,
-        starting_balances=[Money(Decimal(str(config.venue.starting_balance)), base_currency)],
-        default_leverage=Decimal(config.venue.default_leverage),
-    )
-    engine.add_instrument(instrument)
-
-    bars = _load_window_bars(config, start, end)
-    if not bars:
-        raise ValueError(f"No catalog bars for {config.data.instrument_id} / {config.data.bar_type}")
-    engine.add_data(bars)
-
-    strategy = build_factor(factor, config, params)
-    engine.add_strategy(strategy)
-    engine.run()
-
-    orders = engine.cache.orders()
-    positions = engine.cache.positions()
-    snapshots = engine.cache.position_snapshots()
-    accounts = list(engine.cache.accounts())
-    account = accounts[0] if accounts else None
-
-    return BacktestOutcome(
-        config=config,
-        engine=engine,
-        orders_df=ReportProvider.generate_orders_report(orders),
-        fills_df=ReportProvider.generate_order_fills_report(orders),
-        positions_df=ReportProvider.generate_positions_report(positions, snapshots),
-        account_df=ReportProvider.generate_account_report(account) if account else None,
-        stats=engine.get_result(),
     )
 
 
@@ -208,8 +126,15 @@ def evaluate_factor(
 ) -> dict[str, Any]:
     """Run one backtest for factor x symbol and return six metrics + identifiers."""
     spec = get_spec(symbol)
-    config = _symbol_config(base, spec, market)
-    outcome = _run_window(config, factor, start, end, params)
+    config = _symbol_config(base, spec, market, factor)
+    bars = _load_window_bars(config, start, end)
+    if not bars:
+        raise ValueError(
+            f"No catalog bars for {config.data.instrument_id} / {config.data.bar_type}"
+        )
+    outcome = run_backtest(
+        config, bars=bars, strategy_name=factor, strategy_params=params
+    )
 
     metrics = extract_six(outcome)
     row = {

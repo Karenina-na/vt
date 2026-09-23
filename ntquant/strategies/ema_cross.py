@@ -12,7 +12,7 @@ class EMACrossConfig(BaseStrategyConfig):
     """Configuration for the EMA cross strategy (msgspec-annotated fields)."""
 
     fast_period: int = 10
-    slow_period: int = 20
+    slow_period: int = 30
 
 
 class EMACrossStrategy(BaseStrategy):

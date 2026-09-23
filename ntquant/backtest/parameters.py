@@ -1,6 +1,7 @@
-"""Parameter scanning for the EMA cross strategy (zero-dependency grid)."""
+"""Grid scanning for the configured strategy."""
 from __future__ import annotations
 
+from dataclasses import replace
 from itertools import product
 from typing import Any
 
@@ -11,42 +12,14 @@ from ntquant.config import BacktestConfig, ParamScanConfig
 
 
 def _build_config(base: BacktestConfig, params: dict[str, Any]) -> BacktestConfig:
-    """Return a new BacktestConfig overriding strategy parameters.
-
-    The ``data`` section is preserved in full (source/tz/columns/timestamp_col are
-    carried through) so a real-data scan still resolves the catalog.
-    """
-    s = base.strategy
-    new_strategy = type(s)(
-        name=s.name,
-        strategy_id=s.strategy_id,
-        trade_size=str(params.get("trade_size", s.trade_size)),
-        fast_period=int(params.get("fast_period", s.fast_period)),
-        slow_period=int(params.get("slow_period", s.slow_period)),
-        bar_type=s.bar_type,
+    """Return a backtest config with one parameter combination applied."""
+    specific = {key: value for key, value in params.items() if key != "trade_size"}
+    strategy = replace(
+        base.strategy,
+        trade_size=str(params.get("trade_size", base.strategy.trade_size)),
+        params={**base.strategy.params, **specific},
     )
-    d = base.data
-    new_data = type(d)(
-        instrument_id=d.instrument_id,
-        count=d.count,
-        seed=d.seed,
-        catalog_path=d.catalog_path,
-        bar_type=d.bar_type,
-        source=d.source,
-        source_path=d.source_path,
-        tz=d.tz,
-        columns=d.columns,
-        timestamp_col=d.timestamp_col,
-        proxy=d.proxy,
-    )
-    return BacktestConfig(
-        venue=base.venue,
-        instrument=base.instrument,
-        strategy=new_strategy,
-        data=new_data,
-        output_path=base.output_path,
-        log_level=base.log_level,
-    )
+    return replace(base, strategy=strategy)
 
 
 def _grid(scandef: dict[str, list[Any]]) -> list[dict[str, Any]]:
@@ -75,6 +48,11 @@ def scan_parameters(
     param_config: ParamScanConfig,
 ) -> pd.DataFrame:
     """Run a grid search over strategy parameters and return a results table."""
+    base_config = replace(
+        base_config,
+        data=param_config.data,
+        log_level=param_config.log_level,
+    )
     rows: list[dict[str, Any]] = []
     for params in _grid(param_config.scan):
         cfg = _build_config(base_config, params)

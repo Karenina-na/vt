@@ -48,7 +48,8 @@ vt/
 │   │   └── ingest.py        # 取数→规范→wrangler→落库 编排
 │   ├── strategies/
 │   │   ├── base.py          # BaseStrategyConfig/BaseStrategy 多策略底座
-│   │   └── ema_cross.py     # EMA 交叉示例策略
+│   │   ├── registry.py      # 回测与研究共用的策略注册和配置构建
+│   │   └── *.py             # EMA/RSI/布林/ROC/MACD 策略
 │   ├── backtest/
 │   │   ├── runner.py        # 低层 BacktestEngine 运行 + 报表收集
 │   │   ├── parameters.py    # 零依赖网格参数扫描 + 结果聚合
@@ -60,7 +61,6 @@ vt/
 │   ├── research/
 │   │   ├── symbols.py       # 品种表 + spot/perp instrument & bar_type 工厂
 │   │   ├── metrics.py       # 固定六项（PnL/收益%/胜率/盈亏比/夏普/回撤）
-│   │   ├── factors.py       # 因子（Strategy 子类）注册表 + build_strategy
 │   │   └── runner.py        # 多品种×时间窗因子评估（run_factor_evaluation）
 │   ├── risk/
 │   │   └── __init__.py      # 仓位计算 + RiskEngineConfig 工厂（含 bug 规避）
@@ -93,8 +93,8 @@ vt/
 ```
 
 内置因子：`ema_cross` / `rsi_reversal` / `bollinger_reversal` / `roc_momentum` / `macd_cross`。
-新增因子见 [docs/factor-development.md](docs/factor-development.md)（注册进 `research/factors.py`，
-无需改 `make_strategy`）。
+新增策略见 [docs/extending-new-strategy.md](docs/extending-new-strategy.md)，
+在 `strategies/registry.py` 登记后可供回测与研究共用。
 
 > Venue 名不能含连字符：1.231.0 会把 `BINANCE-SPOT` 视作账户子类型导致 issuer 不匹配，spot 数据统一存为 `.BINANCESPOT`。
 
@@ -153,7 +153,7 @@ vt/
   构造对应 Nautilus instrument（FX/EQUITY/CRYPTOCURRENCY/FUTURE/INDEX/COMMODITY/CFD）。
   账户 `base_currency` 须与标的结算币种一致，否则 PnL 换算警告。
 - 新增匹配通用能力优先下沉到 `strategies/base.py`，示例策略保持薄。
-- 新策略需在 `backtest/runner.py` 的 `STRATEGY_CONFIGS` 与 `make_strategy` 两处登记。
+- 新策略在 `strategies/registry.py` 的 `STRATEGIES` 中登记。
 
 ## 测试
 

@@ -12,24 +12,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from nautilus_trader.analysis import ReportProvider
 from nautilus_trader.backtest.engine import BacktestEngine
 from nautilus_trader.config import BacktestEngineConfig, LoggingConfig
 from nautilus_trader.model.currencies import USD
 from nautilus_trader.model.enums import AccountType, OmsType
-from nautilus_trader.model.identifiers import InstrumentId, Venue
+from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.model.objects import Money
 
 from ntquant.backtest.instruments import make_bar_type, make_instrument
 from ntquant.config import BacktestConfig
-from ntquant.strategies.ema_cross import EMACrossConfig, EMACrossStrategy
-
-# Strategy registry: ``config.strategy.name`` -> factory(config, strategy_cfg).
-# Add new strategies here and to the ``STRATEGY_CONFIGS`` map when needed.
-STRATEGY_CONFIGS = {
-    "ema_cross": EMACrossConfig,
-}
+from ntquant.strategies.registry import build_strategy
 
 
 @dataclass
@@ -81,39 +76,22 @@ def build_engine(config: BacktestConfig, risk_engine=None) -> BacktestEngine:
     return BacktestEngine(config=BacktestEngineConfig(**kwargs))
 
 
-def make_strategy(config: BacktestConfig):
-    """Build a strategy instance from the configured strategy name.
-
-    The strategy config class is looked up in ``STRATEGY_CONFIGS``; its extra
-    fields are assembled from ``config.strategy`` (the frozen dataclass) so new
-    strategies can add their own parameters to ``StrategyConfig``.
-    """
-    name = config.strategy.name
-    cfg_cls = STRATEGY_CONFIGS.get(name)
-    if cfg_cls is None:
-        raise ValueError(f"Unknown strategy '{name}'. Registered: {list(STRATEGY_CONFIGS)}")
-
-    cfg = cfg_cls(
-        instrument_id=InstrumentId.from_str(config.instrument.instrument_id),
-        bar_type=make_bar_type(config.strategy.bar_type),
-        trade_size=config.strategy.trade_size,
-        fast_period=config.strategy.fast_period,
-        slow_period=config.strategy.slow_period,
-        strategy_id=config.strategy.strategy_id,
-    )
-    if name == "ema_cross":
-        return EMACrossStrategy(cfg)
-    # When adding a strategy, map cfg_cls -> its Strategy subclass here.
-    raise NotImplementedError(f"Strategy '{name}' config exists but has no builder")
-
-
-def run_backtest(config: BacktestConfig, use_catalog: bool = False) -> BacktestOutcome:
+def run_backtest(
+    config: BacktestConfig,
+    use_catalog: bool = False,
+    *,
+    bars: list | None = None,
+    strategy_name: str | None = None,
+    strategy_params: dict[str, Any] | None = None,
+) -> BacktestOutcome:
     """Run a single backtest and collect outcome + reports.
 
     Args:
         config: Backtest configuration.
-        use_catalog: If True, load bars from the data catalog first
-            (``docs/data``); otherwise generate synthetic bars in memory.
+        use_catalog: Prefer catalog bars when no bars are supplied.
+        bars: Prepared bars, used by time-window research runs.
+        strategy_name: Registered strategy name overriding the config selection.
+        strategy_params: Strategy parameter overrides.
 
     Returns:
         A :class:`BacktestOutcome` holding reports and engine statistics.
@@ -121,6 +99,7 @@ def run_backtest(config: BacktestConfig, use_catalog: bool = False) -> BacktestO
     venue_name = config.venue.name
     bar_type = make_bar_type(config.strategy.bar_type)
     instrument = make_instrument(config)
+    strategy = build_strategy(config, strategy_name, strategy_params)
 
     account_type = _account_type(config.venue.account_type)
     base_currency = _currency(config.venue.base_currency)
@@ -131,15 +110,18 @@ def run_backtest(config: BacktestConfig, use_catalog: bool = False) -> BacktestO
         oms_type=OmsType.NETTING,
         account_type=account_type,
         base_currency=base_currency,
-        starting_balances=[Money(Decimal(str(config.venue.starting_balance)), base_currency)],
+        starting_balances=[
+            Money(Decimal(str(config.venue.starting_balance)), base_currency)
+        ],
         default_leverage=Decimal(config.venue.default_leverage),
     )
     engine.add_instrument(instrument)
 
-    bars = _load_bars(config, bar_type, use_catalog)
+    if bars is None:
+        bars = _load_bars(config, bar_type, use_catalog)
     engine.add_data(bars)
 
-    engine.add_strategy(make_strategy(config))
+    engine.add_strategy(strategy)
     engine.run()
 
     orders = engine.cache.orders()

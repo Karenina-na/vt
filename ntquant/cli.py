@@ -29,9 +29,16 @@ def _cmd_backtest(args: argparse.Namespace) -> int:
 
     cfg = load_backtest_config(args.config)
     configure_python_logging(cfg.log_level)
-    outcome = run_backtest(cfg, use_catalog=args.catalog)
+    outcome = run_backtest(
+        cfg,
+        use_catalog=args.catalog,
+        strategy_name=args.strategy,
+        strategy_params=_parse_params(args.param),
+    )
     paths = generate_all_reports(outcome, cfg.output_path, prefix=args.prefix)
-    print(f"Backtest complete. PnL(total): {outcome.stats.stats_pnls.get('USD', {}).get('PnL (total)')}")
+    pnls = outcome.stats.stats_pnls or {}
+    currency_stats = next(iter(pnls.values()), {})
+    print(f"Backtest complete. PnL(total): {currency_stats.get('PnL (total)')}")
     for name, path in paths.items():
         print(f"  {name}: {path}")
     outcome.engine.dispose()
@@ -89,22 +96,18 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
 
 def _cmd_research(args: argparse.Namespace) -> int:
     from ntquant.config import load_backtest_config
-    from ntquant.research.factors import SUPPORTED_FACTORS, canonical
+    from ntquant.strategies.registry import SUPPORTED_STRATEGIES, canonical
     from ntquant.research.runner import run_factor_evaluation
     from ntquant.research.symbols import SUPPORTED_SYMBOLS
 
-    if args.strategy not in SUPPORTED_FACTORS:
-        print(f"Unknown factor '{args.strategy}'. Registered: {sorted(SUPPORTED_FACTORS)}")
+    if args.strategy not in SUPPORTED_STRATEGIES:
+        print(
+            f"Unknown strategy '{args.strategy}'. "
+            f"Registered: {sorted(SUPPORTED_STRATEGIES)}"
+        )
         return 1
 
-    # Parse --param k=v,k2=v2 into a dict.
-    params: dict[str, str] = {}
-    if args.param:
-        for item in args.param.split(","):
-            k, _, v = item.partition("=")
-            if not k:
-                continue
-            params[k.strip()] = _coerce_scalar(v.strip())
+    params = _parse_params(args.param)
 
     symbols = args.symbols.split(",") if args.symbols else list(SUPPORTED_SYMBOLS)
     cfg = load_backtest_config(args.config)
@@ -128,13 +131,17 @@ def _cmd_research(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="ntquant", description="NautilusTrader quant scaffold")
+    parser = argparse.ArgumentParser(
+        prog="ntquant", description="NautilusTrader quant scaffold"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     bt = sub.add_parser("backtest", help="run a single backtest")
     bt.add_argument("--config", default=None, help="path to backtest YAML")
     bt.add_argument("--catalog", action="store_true", help="load bars from catalog")
     bt.add_argument("--prefix", default="run", help="output file prefix")
+    bt.add_argument("--strategy", default=None, help="registered strategy name")
+    bt.add_argument("--param", default=None, help="strategy parameters as k=v,k2=v2")
     bt.set_defaults(func=_cmd_backtest)
 
     pm = sub.add_parser("param", help="run a parameter scan")
@@ -162,7 +169,9 @@ def build_parser() -> argparse.ArgumentParser:
     rs = sub.add_parser("research", help="evaluate a factor across symbols/time window")
     rs.add_argument("--config", default=None, help="path to backtest YAML")
     rs.add_argument("--strategy", default="ema_cross", help="factor/strategy name")
-    rs.add_argument("--symbols", default=None, help="comma-separated symbols (default: all)")
+    rs.add_argument(
+        "--symbols", default=None, help="comma-separated symbols (default: all)"
+    )
     rs.add_argument("--market", default="perp", choices=["perp", "spot"],
                     help="data market (perp default; spot covers pre-2020)")
     rs.add_argument("--start", default=None, help="window start (ISO datetime)")
@@ -190,6 +199,19 @@ def _coerce_scalar(value: str):
     except ValueError:
         pass
     return value
+
+
+def _parse_params(value: str | None) -> dict:
+    """Parse comma-separated strategy parameter overrides."""
+    if not value:
+        return {}
+    params = {}
+    for item in value.split(","):
+        key, separator, raw = item.partition("=")
+        if not separator or not key.strip():
+            raise ValueError(f"Invalid strategy parameter '{item}'; expected key=value")
+        params[key.strip()] = _coerce_scalar(raw.strip())
+    return params
 
 
 def main(argv: list[str] | None = None) -> int:
